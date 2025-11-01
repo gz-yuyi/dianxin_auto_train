@@ -5,6 +5,7 @@ from celery import signals
 from loguru import logger
 
 from src.config import parse_visible_gpu_devices
+from src.logging_utils import configure_logging
 
 
 def available_gpu_devices() -> list[str]:
@@ -23,6 +24,7 @@ def available_gpu_devices() -> list[str]:
 
 @signals.worker_process_init.connect
 def assign_gpu_to_process(**kwargs) -> None:
+    configure_logging()
     devices = available_gpu_devices()
     if not devices:
         logger.info("Worker process {} running on CPU", current_process().pid)

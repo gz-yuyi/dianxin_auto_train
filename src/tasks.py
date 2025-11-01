@@ -61,6 +61,13 @@ def start_training_task(self, task_id: str) -> dict:
         self.update_state(state="PROGRESS", meta=progress_data)
         send_progress_callback(task_id, epoch, metrics, request_payload.get("callback_url"))
         send_external_epoch_callback(task_id, epoch, metrics)
+        logger.info(
+            "Task {} progress {:.1f}% (epoch {}/{})",
+            task_id,
+            metrics["progress_percentage"],
+            epoch,
+            metrics["total_epochs"],
+        )
 
     def stop_checker() -> bool:
         return is_stop_requested(task_id)
