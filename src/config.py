@@ -95,21 +95,8 @@ def parse_visible_gpu_devices() -> list[str]:
 
 def get_worker_max_concurrency() -> int:
     visible_devices = parse_visible_gpu_devices()
-    gpu_count = 0
-
     if visible_devices:
-        gpu_count = len(visible_devices)
-    else:
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                gpu_count = torch.cuda.device_count()
-        except Exception:
-            gpu_count = 0
-
-    if gpu_count > 0:
-        return gpu_count
+        return len(visible_devices)
     # CPU fallback
     return 1
 

@@ -32,7 +32,7 @@ To verify everything end-to-end, run the integration check once the API and work
 uv run python main.py check-service --host 127.0.0.1 --port 8000
 ```
 
-The worker automatically sets its concurrency by counting visible GPUs (`GPU_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES`); if none are exposed it falls back to a single CPU worker. Each worker process pins itself to a single GPU so only one training task runs on any given GPU at a time.
+The worker automatically sets its concurrency from `GPU_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES`; if these are unset it falls back to a single CPU worker. Each worker process pins itself to a single GPU so only one training task runs on any given GPU at a time.
 
 ### APIs
 The service exposes REST endpoints under `/api/v1/training/tasks`. Key operations:
