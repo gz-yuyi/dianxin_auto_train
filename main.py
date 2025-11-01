@@ -142,5 +142,75 @@ def check_config():
         traceback.print_exc()
 
 
+@cli.command()
+@click.option("--model", default="all", help="要下载的模型 (bert-base-chinese, bert-base-uncased, all)")
+@click.option("--force", is_flag=True, help="强制重新下载已存在的模型")
+def download_model(model: str, force: bool):
+    """下载训练需要的基座模型"""
+    logger.info(f"开始下载模型: {model}")
+    
+    from transformers import BertTokenizer, AutoModel, AutoConfig
+    from src.core.constants import BaseModel
+    from src.core.config import config
+    
+    # 确保模型目录存在
+    from pathlib import Path
+    models_dir = Path(config.MODELS_DIR)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 定义要下载的模型列表
+    models_to_download = []
+    if model == "all":
+        models_to_download = [BaseModel.BERT_BASE_CHINESE, BaseModel.BERT_BASE_UNCASED]
+    elif model == BaseModel.BERT_BASE_CHINESE:
+        models_to_download = [BaseModel.BERT_BASE_CHINESE]
+    elif model == BaseModel.BERT_BASE_UNCASED:
+        models_to_download = [BaseModel.BERT_BASE_UNCASED]
+    else:
+        logger.error(f"不支持的模型: {model}")
+        logger.info(f"支持的模型: {BaseModel.BERT_BASE_CHINESE}, {BaseModel.BERT_BASE_UNCASED}, all")
+        return
+    
+    # 下载模型
+    for model_name in models_to_download:
+        logger.info(f"正在下载模型: {model_name}")
+        try:
+            # 下载模型配置
+            config_obj = AutoConfig.from_pretrained(
+                model_name.value,
+                cache_dir=models_dir,
+                force_download=force
+            )
+            logger.info(f"✅ {model_name} 配置下载成功")
+            
+            # 下载tokenizer
+            tokenizer = BertTokenizer.from_pretrained(
+                model_name.value,
+                cache_dir=models_dir,
+                force_download=force
+            )
+            logger.info(f"✅ {model_name} tokenizer下载成功")
+            
+            # 下载模型
+            model_obj = AutoModel.from_pretrained(
+                model_name.value,
+                cache_dir=models_dir,
+                force_download=force
+            )
+            logger.info(f"✅ {model_name} 模型下载成功")
+            
+            # 显示模型信息
+            logger.info(f"模型信息 - {model_name}:")
+            logger.info(f"  - 隐藏层大小: {config_obj.hidden_size}")
+            logger.info(f"  - 注意力头数: {config_obj.num_attention_heads}")
+            logger.info(f"  - 隐藏层数: {config_obj.num_hidden_layers}")
+            logger.info(f"  - 词汇表大小: {config_obj.vocab_size}")
+            
+        except Exception as e:
+            logger.error(f"❌ 模型 {model_name} 下载失败: {e}")
+    
+    logger.info("模型下载完成")
+
+
 if __name__ == "__main__":
     cli()

@@ -55,8 +55,41 @@ def load_excel_data(
     logger.info(f"加载Excel文件: {file_path}")
 
     # 读取Excel文件
-    df_text = pd.read_excel(file_path, sheet_name=sheet_name, usecols=[text_column])
-    df_label = pd.read_excel(file_path, sheet_name=sheet_name, usecols=[label_column])
+    try:
+        df = pd.read_excel(file_path, sheet_name=sheet_name)
+        logger.info(f"Excel文件读取成功，类型: {type(df)}")
+        
+        # 如果返回的是字典，处理这种情况
+        if isinstance(df, dict):
+            logger.warning(f"pd.read_excel返回了字典，键: {list(df.keys())}")
+            # 如果有sheet_name，尝试获取对应的DataFrame
+            if sheet_name and sheet_name in df:
+                df = df[sheet_name]
+            elif len(df) > 0:
+                # 取第一个sheet
+                first_sheet = list(df.keys())[0]
+                df = df[first_sheet]
+                logger.info(f"使用第一个sheet: {first_sheet}")
+            else:
+                raise ValueError("无法从Excel文件中获取数据")
+        
+        # 确保我们有一个DataFrame
+        if not isinstance(df, pd.DataFrame):
+            raise ValueError(f"期望DataFrame但得到: {type(df)}")
+            
+    except Exception as e:
+        logger.error(f"读取Excel文件失败: {e}")
+        raise
+    
+    # 检查列是否存在
+    if text_column not in df.columns:
+        raise ValueError(f"文本列 '{text_column}' 不存在于Excel文件中。可用列: {list(df.columns)}")
+    if label_column not in df.columns:
+        raise ValueError(f"标签列 '{label_column}' 不存在于Excel文件中。可用列: {list(df.columns)}")
+
+    # 提取需要的列
+    df_text = df[[text_column]].copy()
+    df_label = df[[label_column]].copy()
 
     # 重命名列
     df_text.columns = ["text"]
@@ -67,6 +100,12 @@ def load_excel_data(
 
     # 数据清洗
     df["text"] = df["text"].astype(str).fillna("")
+    
+    # 移除空文本的行
+    df = df[df["text"].str.strip() != ""]
+    
+    # 移除空标签的行
+    df = df[df["label"].notna()]
 
     logger.info(f"数据加载完成，样本数量: {len(df)}")
     return df
@@ -125,11 +164,11 @@ def prepare_training_data(
     # 加载数据
     df = load_excel_data(file_path, text_column, label_column, sheet_name)
 
-    # 创建标签映射
-    label2id, id2label = create_label_mappings(df[label_column])
+    # 创建标签映射 (注意：load_excel_data已经将列重命名为"label")
+    label2id, id2label = create_label_mappings(df["label"])
 
-    # 转换标签
-    df[label_column] = df[label_column].map(label2id)
+    # 转换标签 (使用重命名后的列名)
+    df["label"] = df["label"].map(label2id)
 
     # 划分数据集
     train_df, val_df = split_dataset(df, test_size, random_state)

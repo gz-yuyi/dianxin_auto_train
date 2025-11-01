@@ -12,8 +12,8 @@ class TaskStatus(str, Enum):
 
 
 class BaseModel(str, Enum):
-    BERT_BASE_CHINESE = "bert-base-chinese"
-    BERT_BASE_UNCASED = "bert-base-uncased"
+    BERT_BASE_CHINESE = "google-bert/bert-base-chinese"
+    BERT_BASE_UNCASED = "google-bert/bert-base-uncased"
 
 
 # 默认超参数

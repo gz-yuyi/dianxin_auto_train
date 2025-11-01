@@ -249,14 +249,14 @@ class DatabaseTrainingService:
 
         train_dataset = TextClassificationDataset(
             texts=train_df["text"].tolist(),
-            labels=train_df[task.hyperparameters["label_column"]].tolist(),
+            labels=train_df["label"].tolist(),  # 使用重命名后的列名
             tokenizer=tokenizer,
             max_length=task.hyperparameters["max_sequence_length"],
         )
 
         val_dataset = TextClassificationDataset(
             texts=val_df["text"].tolist(),
-            labels=val_df[task.hyperparameters["label_column"]].tolist(),
+            labels=val_df["label"].tolist(),  # 使用重命名后的列名
             tokenizer=tokenizer,
             max_length=task.hyperparameters["max_sequence_length"],
         )
