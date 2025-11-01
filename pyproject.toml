@@ -4,4 +4,19 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "celery",
+    "click",
+    "fastapi",
+    "loguru",
+    "numpy",
+    "pandas",
+    "python-dotenv",
+    "redis",
+    "requests",
+    "scikit-learn",
+    "torch",
+    "tqdm",
+    "transformers",
+    "uvicorn[standard]",
+]
