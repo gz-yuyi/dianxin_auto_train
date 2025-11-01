@@ -8,7 +8,7 @@ from loguru import logger
 from src.config import get_data_root
 
 
-DEFAULT_TIMEOUT = 30
+DEFAULT_TIMEOUT = 600
 POLL_INTERVAL = 2
 
 
@@ -58,7 +58,15 @@ def get_json(url: str) -> dict:
     return response.json()
 
 
-def run_service_check(base_url: str, dataset: str | None) -> None:
+def delete_request(url: str) -> dict:
+    response = requests.delete(url, timeout=DEFAULT_TIMEOUT)
+    response.raise_for_status()
+    if response.content:
+        return response.json()
+    return {}
+
+
+def run_service_check(base_url: str, dataset: str | None, cleanup: bool) -> None:
     logger.info("Running integration check against {}", base_url)
 
     training_file = resolve_training_file(dataset)
@@ -69,11 +77,11 @@ def run_service_check(base_url: str, dataset: str | None) -> None:
     logger.info("Created task {} with status {}", task_id, create_response["status"])
 
     detail_url = f"{base_url}/training/tasks/{task_id}"
-    stop_url = f"{base_url}/training/tasks/{task_id}/stop"
     delete_url = f"{base_url}/training/tasks/{task_id}"
 
     end_time = time.time() + DEFAULT_TIMEOUT
     last_status = create_response["status"]
+    detail = create_response
 
     while time.time() < end_time:
         detail = get_json(detail_url)
@@ -81,15 +89,50 @@ def run_service_check(base_url: str, dataset: str | None) -> None:
         if status != last_status:
             logger.info("Task {} status changed from {} to {}", task_id, last_status, status)
             last_status = status
-        if status in {"training", "completed", "failed"}:
+        progress = detail.get("progress")
+        if progress is not None and progress.get("progress_percentage") is not None:
+            logger.info(
+                "Progress {:.1f}% (epoch {}/{})",
+                progress["progress_percentage"],
+                progress.get("current_epoch"),
+                progress.get("total_epochs"),
+            )
+        if status == "completed":
             break
+        if status == "failed":
+            raise RuntimeError(f"Task {task_id} failed: {detail.get('error_message')}")
         time.sleep(POLL_INTERVAL)
+    else:
+        raise TimeoutError(f"Timed out waiting for task {task_id} to complete")
 
-    logger.info("Stopping task {}", task_id)
-    post_json(stop_url, {})
-    logger.info("Deleting task {}", task_id)
-    response = requests.delete(delete_url, timeout=DEFAULT_TIMEOUT)
-    response.raise_for_status()
+    if detail["status"] != "completed":
+        raise RuntimeError(f"Task {task_id} ended in unexpected status {detail['status']}")
+
+    artifacts = detail.get("artifacts") or {}
+    model_path = artifacts.get("model_path")
+    label_mapping_path = artifacts.get("label_mapping_path")
+
+    if model_path is None or label_mapping_path is None:
+        raise ValueError("Artifacts missing in task detail response")
+
+    model_file = Path(model_path)
+    label_file = Path(label_mapping_path)
+
+    if not model_file.exists():
+        raise FileNotFoundError(f"Model artifact not found: {model_file}")
+    if not label_file.exists():
+        raise FileNotFoundError(f"Label mapping artifact not found: {label_file}")
+
+    logger.info("Model artifact stored at {}", model_file)
+    logger.info("Label mapping stored at {}", label_file)
+
+    if cleanup:
+        logger.info("Cleaning up task {}", task_id)
+        delete_request(delete_url)
+        logger.info("Cleanup completed for task {}", task_id)
+    else:
+        logger.info("Task {} retained for further inspection", task_id)
+
     logger.info("Integration check complete")
 
 

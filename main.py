@@ -38,9 +38,15 @@ def start_worker(concurrency: int) -> None:
     help="Optional dataset path for running the integration check",
     show_default=False,
 )
-def check_service(host: str, port: int, dataset: str | None) -> None:
+@click.option(
+    "--cleanup/--no-cleanup",
+    default=True,
+    help="Delete task after verification",
+    show_default=True,
+)
+def check_service(host: str, port: int, dataset: str | None, cleanup: bool) -> None:
     base_url = f"http://{host}:{port}/api/v1"
-    run_service_check(base_url, dataset)
+    run_service_check(base_url, dataset, cleanup)
 
 
 if __name__ == "__main__":
