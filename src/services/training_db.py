@@ -1,32 +1,22 @@
-"""训练任务服务"""
+"""基于数据库的训练任务服务"""
 
-import pickle
-from typing import Any, Dict, List, Optional
-
+from typing import Dict, Any, Optional, List
+from src.utils.logger import logger
+from src.models.task import TrainingTask
+from src.core.constants import TaskStatus
+from src.services.storage import storage_service
+from src.database import db
+from src.ml.dataset import prepare_training_data, TextClassificationDataset
+from src.ml.trainer import create_trainer
 from transformers import BertTokenizer
 
-from src.core.constants import TaskStatus
-from src.ml.dataset import TextClassificationDataset, prepare_training_data
-from src.ml.trainer import create_trainer
-from src.models.task import TrainingTask
-from src.services.storage import storage_service
-from src.utils.logger import logger
 
-
-def save_label_mappings(label2id: dict, id2label: dict, file_path: str):
-    """保存标签映射文件"""
-    mappings = {"label2id": label2id, "id2label": id2label}
-    with open(file_path, "wb") as f:
-        pickle.dump(mappings, f)
-
-
-class TrainingService:
-    """训练任务服务"""
+class DatabaseTrainingService:
+    """基于数据库的训练任务服务"""
 
     def __init__(self):
-        self.tasks: Dict[str, TrainingTask] = {}
         self.active_tasks: Dict[str, TrainingTask] = {}
-        logger.info("训练任务服务初始化完成")
+        logger.info("数据库训练任务服务初始化完成")
 
     def create_task(self, task_data: Dict[str, Any]) -> TrainingTask:
         """创建训练任务"""
@@ -47,34 +37,85 @@ class TrainingService:
             callback_url=task_data.get("callback_url"),
         )
 
-        # 保存任务
-        self.tasks[task.task_id] = task
+        # 保存到数据库
+        db_task_data = {
+            "task_id": task.task_id,
+            "model_name_cn": task.model_name_cn,
+            "model_name_en": task.model_name_en,
+            "training_data_file": task.training_data_file,
+            "base_model": task.base_model,
+            "hyperparameters": task.hyperparameters,
+            "callback_url": task.callback_url,
+            "status": task.status.value,
+        }
+        db.insert_task(db_task_data)
 
         logger.info(f"训练任务创建成功 - 任务ID: {task.task_id}")
         return task
 
     def get_task(self, task_id: str) -> Optional[TrainingTask]:
         """获取任务"""
-        return self.tasks.get(task_id)
+        task_data = db.get_task(task_id)
+        if not task_data:
+            return None
+
+        # 从数据库数据重建TrainingTask对象
+        task = TrainingTask(
+            model_name_cn=task_data["model_name_cn"],
+            model_name_en=task_data["model_name_en"],
+            training_data_file=task_data["training_data_file"],
+            base_model=task_data["base_model"],
+            hyperparameters=task_data["hyperparameters"],
+            callback_url=task_data["callback_url"],
+        )
+
+        # 设置数据库中的状态
+        task.status = TaskStatus(task_data["status"])
+        task.error_message = task_data["error_message"]
+        task.progress = task_data["progress"]
+        task.created_at = task_data["created_at"]
+        task.started_at = task_data["started_at"]
+        task.completed_at = task_data["completed_at"]
+
+        return task
 
     def get_all_tasks(self, status: Optional[str] = None) -> List[TrainingTask]:
         """获取所有任务"""
-        tasks = list(self.tasks.values())
+        tasks_data = db.get_all_tasks(status)
+        tasks = []
 
-        if status:
-            tasks = [task for task in tasks if task.status.value == status]
+        for task_data in tasks_data:
+            task = TrainingTask(
+                model_name_cn=task_data["model_name_cn"],
+                model_name_en=task_data["model_name_en"],
+                training_data_file=task_data["training_data_file"],
+                base_model=task_data["base_model"],
+                hyperparameters=task_data["hyperparameters"],
+                callback_url=task_data["callback_url"],
+            )
 
-        # 按创建时间倒序排列
-        tasks.sort(key=lambda x: x.created_at, reverse=True)
+            # 设置数据库中的状态
+            task.status = TaskStatus(task_data["status"])
+            task.error_message = task_data["error_message"]
+            task.progress = task_data["progress"]
+            task.created_at = task_data["created_at"]
+            task.started_at = task_data["started_at"]
+            task.completed_at = task_data["completed_at"]
+
+            tasks.append(task)
 
         return tasks
 
     def update_task_progress(self, task_id: str, progress_data: Dict[str, Any]):
         """更新任务进度"""
-        task = self.get_task(task_id)
-        if task:
-            task.update_progress(progress_data)
-            logger.debug(f"任务进度已更新 - 任务ID: {task_id}, 进度: {progress_data}")
+        # 更新进度百分比
+        if "progress_percentage" in progress_data:
+            db.update_task_progress(task_id, progress_data["progress_percentage"])
+
+        # 插入进度历史记录
+        db.insert_progress_history(task_id, progress_data)
+
+        logger.debug(f"任务进度已更新 - 任务ID: {task_id}, 进度: {progress_data}")
 
     def stop_task(self, task_id: str) -> bool:
         """停止任务"""
@@ -88,6 +129,7 @@ class TrainingService:
             return False
 
         task.update_status(TaskStatus.STOPPED)
+        db.update_task_status(task_id, TaskStatus.STOPPED.value)
 
         # 从活跃任务中移除
         if task_id in self.active_tasks:
@@ -109,20 +151,22 @@ class TrainingService:
             return False
 
         # 删除任务
-        del self.tasks[task_id]
+        deleted = db.delete_task(task_id)
 
-        # 清理相关文件
-        try:
-            if task.training_data_file:
-                storage_service.delete_file(task.training_data_file)
+        if deleted:
+            # 清理相关文件
+            try:
+                if task.training_data_file:
+                    storage_service.delete_file(task.training_data_file)
 
-            if task.model_name_en:
-                storage_service.delete_model(task.model_name_en)
-        except Exception as e:
-            logger.warning(f"清理任务文件时出错: {e}")
+                if task.model_name_en:
+                    storage_service.delete_model(task.model_name_en)
+            except Exception as e:
+                logger.warning(f"清理任务文件时出错: {e}")
 
-        logger.info(f"任务已删除 - 任务ID: {task_id}")
-        return True
+            logger.info(f"任务已删除 - 任务ID: {task_id}")
+
+        return deleted
 
     def get_active_task_count(self) -> int:
         """获取活跃任务数量"""
@@ -151,6 +195,7 @@ class TrainingService:
 
         # 更新任务状态
         task.update_status(TaskStatus.TRAINING)
+        db.update_task_status(task_id, TaskStatus.TRAINING.value)
         self.active_tasks[task_id] = task
 
         logger.info(f"开始训练任务 - 任务ID: {task_id}")
@@ -161,12 +206,13 @@ class TrainingService:
 
             # 训练完成
             task.update_status(TaskStatus.COMPLETED)
+            db.update_task_status(task_id, TaskStatus.COMPLETED.value)
             logger.info(f"训练任务完成 - 任务ID: {task_id}")
 
         except Exception as e:
             # 训练失败
             task.update_status(TaskStatus.FAILED)
-            task.error_message = str(e)
+            db.update_task_status(task_id, TaskStatus.FAILED.value, str(e))
             logger.error(f"训练任务失败 - 任务ID: {task_id}, 错误: {e}")
             raise
 
@@ -289,5 +335,18 @@ class TrainingService:
             logger.error(f"发送回调通知失败 - 任务ID: {task.task_id}, 错误: {e}")
 
 
+# 辅助函数
+def save_label_mappings(
+    label2id: Dict[str, int], id2label: Dict[int, str], file_path: str
+):
+    """保存标签映射"""
+    import pickle
+
+    mappings = {"label2id": label2id, "id2label": id2label}
+    with open(file_path, "wb") as f:
+        pickle.dump(mappings, f)
+    logger.info(f"标签映射已保存: {file_path}")
+
+
 # 全局训练服务实例
-training_service = TrainingService()
+training_service = DatabaseTrainingService()

@@ -1,8 +1,10 @@
 """健康检查路由"""
+
 from fastapi import APIRouter
 from src.utils.logger import logger
 
 router = APIRouter(tags=["health"])
+
 
 @router.get("/health")
 async def health_check():
@@ -11,8 +13,9 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "bert-training-api",
-        "timestamp": "2024-01-01T00:00:00Z"  # 这里应该使用实际时间
+        "timestamp": "2024-01-01T00:00:00Z",  # 这里应该使用实际时间
     }
+
 
 @router.get("/ready")
 async def readiness_check():
@@ -21,5 +24,5 @@ async def readiness_check():
     return {
         "status": "ready",
         "service": "bert-training-api",
-        "timestamp": "2024-01-01T00:00:00Z"  # 这里应该使用实际时间
+        "timestamp": "2024-01-01T00:00:00Z",  # 这里应该使用实际时间
     }

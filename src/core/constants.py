@@ -1,5 +1,7 @@
 """项目常量定义"""
+
 from enum import Enum
+
 
 class TaskStatus(str, Enum):
     QUEUED = "queued"
@@ -8,9 +10,11 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
     STOPPED = "stopped"
 
+
 class BaseModel(str, Enum):
     BERT_BASE_CHINESE = "bert-base-chinese"
     BERT_BASE_UNCASED = "bert-base-uncased"
+
 
 # 默认超参数
 DEFAULT_HYPERPARAMETERS = {
@@ -22,7 +26,7 @@ DEFAULT_HYPERPARAMETERS = {
     "train_val_split": 0.2,
     "text_column": "内容合并",
     "label_column": "标签列",
-    "sheet_name": None
+    "sheet_name": None,
 }
 
 # 文件路径常量

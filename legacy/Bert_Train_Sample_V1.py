@@ -14,41 +14,51 @@ from torch.optim import Adam
 from tqdm import tqdm
 
 # 下载的预训练文件路径
-BERT_PATH = 'bert-base-chinese'
+BERT_PATH = "bert-base-chinese"
 tokenizer = BertTokenizer.from_pretrained(BERT_PATH)
-#忽视警告
-warnings.filterwarnings("ignore", message="1Torch was not compiled with flash attention")
+# 忽视警告
+warnings.filterwarnings(
+    "ignore", message="1Torch was not compiled with flash attention"
+)
 
-#存储映射
+# 存储映射
 LABEL2ID = {}
 ID2LABEL = {}
 
-#文件路径
-model_filename='wenchong.pt'
-save_path = r"C:\Users\admin\Desktop\蚊虫"  #文件夹
-filename = os.path.join(save_path, r'C:\Users\admin\Desktop\蚊虫\登革热.xlsx')      #工作表
-sheetname = '原始数据'         # 工作表名
-column_name = "内容合并"      #文本列
-label_name = "标签"        #标签列
+# 文件路径
+model_filename = "wenchong.pt"
+save_path = r"C:\Users\admin\Desktop\蚊虫"  # 文件夹
+filename = os.path.join(save_path, r"C:\Users\admin\Desktop\蚊虫\登革热.xlsx")  # 工作表
+sheetname = "原始数据"  # 工作表名
+column_name = "内容合并"  # 文本列
+label_name = "标签"  # 标签列
+
 
 # 定义一个函数来读取文本文件并返回DataFrame
 def read_text_data(filename):
     data = []
-    with open(filename, 'r', encoding='utf-8') as file:
+    with open(filename, "r", encoding="utf-8") as file:
         for line in file:
-            label, text = line.strip().split(' ', 1)  # 分割标签和文本
+            label, text = line.strip().split(" ", 1)  # 分割标签和文本
             data.append((LABEL2ID[label], text))
     df = pd.DataFrame(data, columns=[label_name, column_name])
     return df
 
-def dataprocess(filename, sheetname, text_column, label_column, test_size=0.2, random_state=42):
+
+def dataprocess(
+    filename, sheetname, text_column, label_column, test_size=0.2, random_state=42
+):
     # 读取Excel文件的指定表单和列
     file_path = filename
     sheet_name = sheetname
 
     # 读取文本数据和标签数据
-    df_text = pd.read_excel(file_path, sheet_name=sheet_name, usecols=[text_column], skiprows=0)
-    df_label = pd.read_excel(file_path, sheet_name=sheet_name, usecols=[label_column], skiprows=0)
+    df_text = pd.read_excel(
+        file_path, sheet_name=sheet_name, usecols=[text_column], skiprows=0
+    )
+    df_label = pd.read_excel(
+        file_path, sheet_name=sheet_name, usecols=[label_column], skiprows=0
+    )
 
     # 假设列名分别为'text'和'label'，如果列名不同，请相应修改
     df_text.columns = [column_name]
@@ -58,39 +68,50 @@ def dataprocess(filename, sheetname, text_column, label_column, test_size=0.2, r
 
     # 确保“文本内容”列是字符串类型，并将空值填充为空字符串
     df[column_name] = df[column_name].astype(str)
-    df[column_name] = df[column_name].fillna('')
+    df[column_name] = df[column_name].fillna("")
 
     # 自动创建标签到ID的映射
     labels = df[label_name].unique()
-    label_number=len(labels)
+    label_number = len(labels)
     LABEL2ID = {label: idx for idx, label in enumerate(labels)}
     ID2LABEL = {idx: label for label, idx in LABEL2ID.items()}
     df[label_name] = df[label_name].map(LABEL2ID)
-    return df, LABEL2ID, ID2LABEL,label_number
+    return df, LABEL2ID, ID2LABEL, label_number
+
 
 # 调用函数读取数据
-data_df,LABEL2ID,ID2LABEL,out_features = dataprocess(filename,sheetname,column_name,label_name)
+data_df, LABEL2ID, ID2LABEL, out_features = dataprocess(
+    filename, sheetname, column_name, label_name
+)
 
 # 保存到文件
-filename = os.path.join(save_path, f'label_mappings_{model_filename}.pkl')
-with open(filename, 'wb') as f:
+filename = os.path.join(save_path, f"label_mappings_{model_filename}.pkl")
+with open(filename, "wb") as f:
     pickle.dump((LABEL2ID, ID2LABEL), f)
 
 
 # 划分数据集，80%用于训练，10%用于验证，10%用于测试
-train_df, temp_df = train_test_split(data_df, test_size=0.2, stratify=None, random_state=42)
-dev_df, test_df = train_test_split(temp_df, test_size=0.5, stratify=None, random_state=42)
+train_df, temp_df = train_test_split(
+    data_df, test_size=0.2, stratify=None, random_state=42
+)
+dev_df, test_df = train_test_split(
+    temp_df, test_size=0.5, stratify=None, random_state=42
+)
 
 
 class MyDataset(Dataset):
     def __init__(self, df):
         # tokenizer分词后可以被自动汇聚
-        self.texts = [tokenizer(text,
-                                padding='max_length',  # 填充到最大长度
-                                max_length=512,  # 经过数据分析，最大长度为35
-                                truncation=True,
-                                return_tensors="pt")
-                      for text in df[column_name]]
+        self.texts = [
+            tokenizer(
+                text,
+                padding="max_length",  # 填充到最大长度
+                max_length=512,  # 经过数据分析，最大长度为35
+                truncation=True,
+                return_tensors="pt",
+            )
+            for text in df[column_name]
+        ]
         # Dataset会自动返回Tensor
         self.labels = [label for label in df[label_name]]
 
@@ -102,7 +123,7 @@ class MyDataset(Dataset):
 
 
 class BertClassifier(nn.Module):
-    def __init__(self,out_features):
+    def __init__(self, out_features):
         super(BertClassifier, self).__init__()
         self.bert = BertModel.from_pretrained(BERT_PATH)
         self.dropout = nn.Dropout(0.5)
@@ -110,11 +131,14 @@ class BertClassifier(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, input_id, mask):
-        _, pooled_output = self.bert(input_ids=input_id, attention_mask=mask, return_dict=False)
+        _, pooled_output = self.bert(
+            input_ids=input_id, attention_mask=mask, return_dict=False
+        )
         dropout_output = self.dropout(pooled_output)
         linear_output = self.linear(dropout_output)
         final_layer = self.relu(linear_output)
         return final_layer
+
 
 train_dataset = MyDataset(train_df)
 dev_dataset = MyDataset(dev_df)
@@ -126,6 +150,7 @@ epoch = 5
 batch_size = 64
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 random_seed = 1999
+
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -161,9 +186,11 @@ best_dev_acc = 0
 for epoch_num in range(epoch):
     total_acc_train = 0
     total_loss_train = 0
-    for inputs, labels in tqdm(train_loader,desc=f"Epoch {epoch_num + 1}/{epoch}"):
-        input_ids = inputs['input_ids'].squeeze(1).to(device)  # torch.Size([32, 35])
-        masks = inputs['attention_mask'].squeeze(1).to(device)  # torch.Size([32, 1, 35])
+    for inputs, labels in tqdm(train_loader, desc=f"Epoch {epoch_num + 1}/{epoch}"):
+        input_ids = inputs["input_ids"].squeeze(1).to(device)  # torch.Size([32, 35])
+        masks = (
+            inputs["attention_mask"].squeeze(1).to(device)
+        )  # torch.Size([32, 1, 35])
         labels = labels.to(device)
         output = model(input_ids, masks)
 
@@ -183,8 +210,12 @@ for epoch_num in range(epoch):
     with torch.no_grad():
         # 循环获取数据集，并用训练好的模型进行验证
         for inputs, labels in dev_loader:
-            input_ids = inputs['input_ids'].squeeze(1).to(device)  # torch.Size([32, 35])
-            masks = inputs['attention_mask'].squeeze(1).to(device)  # torch.Size([32, 1, 35])
+            input_ids = (
+                inputs["input_ids"].squeeze(1).to(device)
+            )  # torch.Size([32, 35])
+            masks = (
+                inputs["attention_mask"].squeeze(1).to(device)
+            )  # torch.Size([32, 1, 35])
             labels = labels.to(device)
             output = model(input_ids, masks)
 
@@ -193,11 +224,11 @@ for epoch_num in range(epoch):
             total_acc_val += acc
             total_loss_val += batch_loss.item()
 
-        print(f'''Epochs: {epoch_num + 1} 
+        print(f"""Epochs: {epoch_num + 1} 
           | Train Loss: {total_loss_train / len(train_dataset): .3f} 
           | Train Accuracy: {total_acc_train / len(train_dataset): .3f} 
           | Val Loss: {total_loss_val / len(dev_dataset): .3f} 
-          | Val Accuracy: {total_acc_val / len(dev_dataset): .3f}''')
+          | Val Accuracy: {total_acc_val / len(dev_dataset): .3f}""")
 
         # 保存最优的模型
         if total_acc_val / len(dev_dataset) > best_dev_acc:
@@ -207,4 +238,4 @@ for epoch_num in range(epoch):
     model.train()
 
 # 保存最后的模型，以便继续训练
-#save_model('pingtailast.pt')
+# save_model('pingtailast.pt')
