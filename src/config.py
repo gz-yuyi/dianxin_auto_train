@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-
 from dotenv import load_dotenv
 
 
@@ -84,6 +83,37 @@ def get_callback_timeout() -> float:
     return env_float("EXTERNAL_CALLBACK_TIMEOUT", 10.0)
 
 
+def parse_visible_gpu_devices() -> list[str]:
+    raw = env_str("GPU_VISIBLE_DEVICES")
+    if raw is None:
+        raw = env_str("CUDA_VISIBLE_DEVICES")
+    if raw is None:
+        return []
+    devices = [device.strip() for device in raw.split(",")]
+    return [device for device in devices if device]
+
+
+def get_worker_max_concurrency() -> int:
+    visible_devices = parse_visible_gpu_devices()
+    gpu_count = 0
+
+    if visible_devices:
+        gpu_count = len(visible_devices)
+    else:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                gpu_count = torch.cuda.device_count()
+        except Exception:
+            gpu_count = 0
+
+    if gpu_count > 0:
+        return gpu_count
+    # CPU fallback
+    return 1
+
+
 __all__ = [
     "get_api_host",
     "get_api_port",
@@ -95,5 +125,7 @@ __all__ = [
     "get_external_publish_callback_url",
     "get_model_output_dir",
     "get_redis_url",
+    "parse_visible_gpu_devices",
+    "get_worker_max_concurrency",
     "project_root",
 ]

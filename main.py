@@ -5,7 +5,7 @@ from loguru import logger
 from src.api.app import create_app
 from src.celery_app import celery_app
 from src.check_service import run_service_check
-from src.config import get_api_host, get_api_port
+from src.config import get_api_host, get_api_port, get_worker_max_concurrency
 from src.logging_utils import configure_logging
 
 
@@ -23,9 +23,12 @@ def start_api(host: str, port: int) -> None:
 
 
 @cli.command("worker")
-@click.option("--concurrency", default=1, show_default=True, type=int, help="Celery worker concurrency")
-def start_worker(concurrency: int) -> None:
-    argv = ["worker", "--loglevel=info", f"--concurrency={concurrency}"]
+def start_worker() -> None:
+    resolved = get_worker_max_concurrency()
+    if resolved < 1:
+        resolved = 1
+    logger.info("Starting worker with concurrency {}", resolved)
+    argv = ["worker", "--loglevel=info", f"--concurrency={resolved}"]
     celery_app.worker_main(argv)
 
 

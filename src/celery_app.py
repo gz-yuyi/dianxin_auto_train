@@ -2,6 +2,9 @@ from celery import Celery
 
 from src.config import get_celery_backend_url, get_celery_broker_url
 
+# Ensure worker initialisation hooks are registered
+import src.worker_allocation  # noqa: F401
+
 
 celery_app = Celery(
     "dianxin_auto_train",

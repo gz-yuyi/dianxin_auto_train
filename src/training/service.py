@@ -1,4 +1,5 @@
 import pickle
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -67,6 +68,18 @@ def setup_seed(seed: int) -> None:
 
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
+
+
+def select_device(task_id: str) -> torch.device:
+    if torch.cuda.is_available():
+        visible = os.getenv("CUDA_VISIBLE_DEVICES")
+        if visible:
+            # When CUDA_VISIBLE_DEVICES is set per-process we always use local index 0
+            torch.cuda.set_device(0)
+            return torch.device("cuda:0")
+        torch.cuda.set_device(0)
+        return torch.device("cuda:0")
+    return torch.device("cpu")
 
 
 def prepare_dataframe(
@@ -157,7 +170,8 @@ def run_training_loop(
     save_label_mappings(label_mapping_path, label_to_id, id_to_label)
 
     model = BertClassifier(request_payload["base_model"], output_dim=len(label_to_id))
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = select_device(task_id)
+    logger.info("Task {} using device {}", task_id, device)
     model = model.to(device)
     criterion = nn.CrossEntropyLoss().to(device)
     optimizer = Adam(model.parameters(), lr=hp["learning_rate"])
