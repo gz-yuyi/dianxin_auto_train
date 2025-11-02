@@ -9,6 +9,7 @@ dependencies = [
     "click",
     "fastapi",
     "loguru",
+    "modelscope>=1.31.0",
     "numpy",
     "openpyxl>=3.1.5",
     "pandas",
