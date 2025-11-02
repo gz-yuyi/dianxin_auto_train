@@ -13,8 +13,11 @@ from src.config import (
 def _post_json(url: str, payload: dict) -> None:
     timeout = get_callback_timeout()
     logger.debug("Sending callback to {} with payload {}", url, payload)
-    response = requests.post(url, json=payload, timeout=timeout)
-    response.raise_for_status()
+    try:
+        response = requests.post(url, json=payload, timeout=timeout)
+        response.raise_for_status()
+    except Exception as e:
+        logger.warning("Failed to send callback to {}: {}", url, str(e))
 
 
 def send_progress_callback(task_id: str, epoch: int, metrics: dict, callback_url: str | None) -> None:

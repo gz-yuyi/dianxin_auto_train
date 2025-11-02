@@ -220,11 +220,6 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
-[package.optional-dependencies]
-modelscope = [
-    { name = "modelscope" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "celery" },
@@ -232,7 +227,6 @@ requires-dist = [
     { name = "fastapi" },
     { name = "loguru" },
     { name = "modelscope", specifier = ">=1.31.0" },
-    { name = "modelscope", marker = "extra == 'modelscope'" },
     { name = "numpy" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas" },
