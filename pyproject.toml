@@ -10,6 +10,7 @@ dependencies = [
     "fastapi",
     "loguru",
     "numpy",
+    "openpyxl>=3.1.5",
     "pandas",
     "python-dotenv",
     "redis",
@@ -20,3 +21,7 @@ dependencies = [
     "transformers",
     "uvicorn[standard]",
 ]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
