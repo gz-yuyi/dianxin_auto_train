@@ -2,6 +2,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
 
+from src.callbacks import send_external_status_change
 from src.celery_app import celery_app
 from src.schemas import (
     DeleteTaskResponse,
@@ -85,6 +86,7 @@ def create_training_task(payload: TrainingTaskCreateRequest) -> TrainingTaskResp
         "celery_task_id": None,
     }
     create_task_record(record)
+    send_external_status_change(task_id, "queued")
     celery_task_id = f"training-{task_id}"
     start_training_task.apply_async(args=(task_id,), task_id=celery_task_id)
     update_task_record(task_id, {"celery_task_id": celery_task_id})

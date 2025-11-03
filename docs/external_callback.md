@@ -44,16 +44,17 @@ POST /api/model/train/notify/result
 |---|---|---|---|
 |200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|none|[SingleResponseString](#schemasingleresponsestring)|
 
-## POST 专用模型训练-发布完成结果通知接口
 
-POST /api/model/train/notify/publish_result
+## POST 专用模型训练-训练状态变更通知
+
+POST /api/model/train/notify/status
 
 > Body 请求参数
 
 ```json
 {
-  "trainTaskId": 0,
-  "publishResult": 0,
+  "trainTaskId": "string",
+  "statusType": 0,
   "failureMessage": "string"
 }
 ```
@@ -62,7 +63,7 @@ POST /api/model/train/notify/publish_result
 
 |名称|位置|类型|必选|说明|
 |---|---|---|---|---|
-|body|body|[SpecialModelPublishResultNotifyReq](#schemaspecialmodelpublishresultnotifyreq)| 否 |none|
+|body|body|[SpecialModelTrainStatusChangeNotifyReq](#schemaspecialmodeltrainstatuschangenotifyreq)| 否 |none|
 
 > 返回示例
 
@@ -85,49 +86,17 @@ POST /api/model/train/notify/publish_result
 
 # 数据模型
 
-<h2 id="tocS_SpecialModelTrainResultNotifyReq">SpecialModelTrainResultNotifyReq</h2>
+<h2 id="tocS_SpecialModelTrainStatusChangeNotifyReq">SpecialModelTrainStatusChangeNotifyReq</h2>
 
-<a id="schemaspecialmodeltrainresultnotifyreq"></a>
-<a id="schema_SpecialModelTrainResultNotifyReq"></a>
-<a id="tocSspecialmodeltrainresultnotifyreq"></a>
-<a id="tocsspecialmodeltrainresultnotifyreq"></a>
-
-```json
-{
-  "trainTaskId": 0,
-  "epoch": 0,
-  "accuracy": 0,
-  "loss": 0,
-  "valAccuracy": 0,
-  "valLoss": 0,
-  "f1Score": 0
-}
-
-```
-
-### 属性
-
-|名称|类型|必选|约束|中文名|说明|
-|---|---|---|---|---|---|
-|trainTaskId|integer(int64)|true|none||任务ID（必传）|
-|epoch|integer|true|none||轮次（必传）|
-|accuracy|number|false|none||正确率|
-|loss|number|false|none||损失率|
-|valAccuracy|number|false|none||验证正确率|
-|valLoss|number|false|none||验证损失率|
-|f1Score|number|false|none||f1分数|
-
-<h2 id="tocS_SpecialModelPublishResultNotifyReq">SpecialModelPublishResultNotifyReq</h2>
-
-<a id="schemaspecialmodelpublishresultnotifyreq"></a>
-<a id="schema_SpecialModelPublishResultNotifyReq"></a>
-<a id="tocSspecialmodelpublishresultnotifyreq"></a>
-<a id="tocsspecialmodelpublishresultnotifyreq"></a>
+<a id="schemaspecialmodeltrainstatuschangenotifyreq"></a>
+<a id="schema_SpecialModelTrainStatusChangeNotifyReq"></a>
+<a id="tocSspecialmodeltrainstatuschangenotifyreq"></a>
+<a id="tocsspecialmodeltrainstatuschangenotifyreq"></a>
 
 ```json
 {
-  "trainTaskId": 0,
-  "publishResult": 0,
+  "trainTaskId": "string",
+  "statusType": 0,
   "failureMessage": "string"
 }
 
@@ -137,9 +106,9 @@ POST /api/model/train/notify/publish_result
 
 |名称|类型|必选|约束|中文名|说明|
 |---|---|---|---|---|---|
-|trainTaskId|integer(int64)|true|none||任务ID（必传）|
-|publishResult|integer|true|none||发布结果（必传，1-成功，0-失败）|
-|failureMessage|string|false|none||发布失败原因（如失败，100字符内）|
+|trainTaskId|string|true|none||任务ID（必传）|
+|statusType|integer|true|none||状态类型（必传，1-排队，2-训练中，3-训练完成，4-训练失败 5-取消）|
+|failureMessage|string|false|none||失败原因（状态为异常或取消时必传，500字符内）|
 
 <h2 id="tocS_SingleResponseString">SingleResponseString</h2>
 

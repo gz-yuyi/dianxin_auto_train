@@ -6,8 +6,20 @@ from loguru import logger
 from src.config import (
     get_callback_timeout,
     get_external_callback_base_url,
-    get_external_publish_callback_url,
+    get_external_status_callback_url,
 )
+
+
+STATUS_TYPE_BY_STATUS: dict[str, int] = {
+    "queued": 1,
+    "training": 2,
+    "completed": 3,
+    "failed": 4,
+    "stopped": 5,
+    "cancelled": 5,
+}
+
+FAILURE_MESSAGE_REQUIRED = {4, 5}
 
 
 def _post_json(url: str, payload: dict) -> None:
@@ -53,24 +65,42 @@ def send_external_epoch_callback(task_id: str, epoch: int, metrics: dict) -> Non
     _post_json(url, payload)
 
 
-def send_external_publish_callback(task_id: str, publish_result: int, failure_message: str | None) -> None:
-    publish_url = get_external_publish_callback_url()
+def _resolve_status_callback_url() -> str | None:
+    status_url = get_external_status_callback_url()
+    if status_url:
+        return status_url
     base_url = get_external_callback_base_url()
-    if publish_url is None and base_url is None:
-        return
-    target_url = publish_url
+    if base_url is None:
+        return None
+    return urljoin(base_url.rstrip("/") + "/", "api/model/train/notify/status")
+
+
+def send_external_status_callback(task_id: str, status_type: int, failure_message: str | None = None) -> None:
+    target_url = _resolve_status_callback_url()
     if target_url is None:
-        target_url = urljoin(base_url.rstrip("/") + "/", "api/model/train/notify/publish_result")
+        return
     payload = {
         "trainTaskId": task_id,
-        "publishResult": publish_result,
-        "failureMessage": failure_message or "",
+        "statusType": status_type,
     }
+    if failure_message:
+        payload["failureMessage"] = failure_message[:500]
+    elif status_type in FAILURE_MESSAGE_REQUIRED:
+        payload["failureMessage"] = ""
     _post_json(target_url, payload)
+
+
+def send_external_status_change(task_id: str, status: str, failure_message: str | None = None) -> None:
+    status_type = STATUS_TYPE_BY_STATUS.get(status)
+    if status_type is None:
+        logger.warning("Unsupported status {} for external status callback", status)
+        return
+    send_external_status_callback(task_id, status_type, failure_message)
 
 
 __all__ = [
     "send_external_epoch_callback",
-    "send_external_publish_callback",
+    "send_external_status_callback",
+    "send_external_status_change",
     "send_progress_callback",
 ]

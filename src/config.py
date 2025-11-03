@@ -75,8 +75,13 @@ def get_external_callback_base_url() -> str | None:
     return env_str("EXTERNAL_CALLBACK_BASE_URL")
 
 
+def get_external_status_callback_url() -> str | None:
+    return env_str("EXTERNAL_STATUS_CALLBACK_URL") or env_str("EXTERNAL_PUBLISH_CALLBACK_URL")
+
+
 def get_external_publish_callback_url() -> str | None:
-    return env_str("EXTERNAL_PUBLISH_CALLBACK_URL")
+    """Deprecated alias, kept for backward compatibility."""
+    return get_external_status_callback_url()
 
 
 def get_callback_timeout() -> float:
@@ -110,6 +115,7 @@ __all__ = [
     "get_data_root",
     "get_external_callback_base_url",
     "get_external_publish_callback_url",
+    "get_external_status_callback_url",
     "get_model_output_dir",
     "get_redis_url",
     "parse_visible_gpu_devices",

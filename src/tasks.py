@@ -3,7 +3,7 @@ from loguru import logger
 
 from src.callbacks import (
     send_external_epoch_callback,
-    send_external_publish_callback,
+    send_external_status_change,
     send_progress_callback,
 )
 from src.celery_app import celery_app
@@ -21,6 +21,7 @@ def start_training_task(self, task_id: str) -> dict:
     request_payload = record["request_payload"]
     if record.get("status") == "stopped" or is_stop_requested(task_id):
         logger.info("Task {} marked as stopped before execution", task_id)
+        send_external_status_change(task_id, "stopped", "Training stopped before execution")
         return {"status": "stopped"}
 
     update_task_record(
@@ -40,6 +41,7 @@ def start_training_task(self, task_id: str) -> dict:
             "error_message": None,
         },
     )
+    send_external_status_change(task_id, "training")
 
     def progress_handler(epoch: int, metrics: dict) -> None:
         progress_data = {
@@ -72,12 +74,27 @@ def start_training_task(self, task_id: str) -> dict:
     def stop_checker() -> bool:
         return is_stop_requested(task_id)
 
-    result = run_training_loop(
-        task_id=task_id,
-        request_payload=request_payload,
-        progress_handler=progress_handler,
-        stop_requested=stop_checker,
-    )
+    try:
+        result = run_training_loop(
+            task_id=task_id,
+            request_payload=request_payload,
+            progress_handler=progress_handler,
+            stop_requested=stop_checker,
+        )
+    except Exception as exc:
+        clear_stop_request(task_id)
+        error_message = str(exc)
+        logger.exception("Task {} failed", task_id)
+        update_task_record(
+            task_id,
+            {
+                "status": "failed",
+                "completed_at": iso_now(),
+                "error_message": error_message,
+            },
+        )
+        send_external_status_change(task_id, "failed", error_message)
+        raise
 
     clear_stop_request(task_id)
 
@@ -106,7 +123,7 @@ def start_training_task(self, task_id: str) -> dict:
                 "artifacts": artifacts,
             },
         )
-        send_external_publish_callback(task_id, publish_result=1, failure_message=None)
+        send_external_status_change(task_id, "completed")
         return {
             "status": "completed",
             "artifacts": artifacts,
@@ -120,7 +137,7 @@ def start_training_task(self, task_id: str) -> dict:
             "completed_at": iso_now(),
         },
     )
-    send_external_publish_callback(task_id, publish_result=0, failure_message="Training stopped by request")
+    send_external_status_change(task_id, "stopped", "Training stopped by request")
     self.update_state(state=states.REVOKED)
     return {"status": "stopped"}
 
