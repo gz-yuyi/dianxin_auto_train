@@ -65,7 +65,7 @@ def serialize_list_item(record: dict) -> TrainingTaskListItem:
 def create_training_task(payload: TrainingTaskCreateRequest) -> TrainingTaskResponse:
     task_id = uuid4().hex
     created_at = iso_now()
-    request_data = payload.model_dump()
+    request_data = payload.model_dump(mode="json")
     record = {
         "task_id": task_id,
         "status": "queued",

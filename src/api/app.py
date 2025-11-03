@@ -11,7 +11,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         description="Automatic model training service",
     )
-    app.include_router(training_router, prefix="/api/v1")
+    app.include_router(training_router)
     return app
 
 
