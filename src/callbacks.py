@@ -68,7 +68,13 @@ def send_external_epoch_callback(task_id: str, epoch: int, metrics: dict) -> Non
 def _resolve_status_callback_url() -> str | None:
     status_url = get_external_status_callback_url()
     if status_url:
-        return status_url
+        trimmed = status_url.rstrip("/")
+        sentinel = "/api/model/train/notify/status"
+        if trimmed.endswith(sentinel):
+            return trimmed
+        if sentinel in trimmed:
+            return status_url
+        return urljoin(trimmed + "/", sentinel.lstrip("/"))
     base_url = get_external_callback_base_url()
     if base_url is None:
         return None
