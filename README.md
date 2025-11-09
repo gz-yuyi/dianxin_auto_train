@@ -34,6 +34,24 @@ uv run python main.py check-service --host 127.0.0.1 --port 8000
 
 The worker automatically sets its concurrency from `GPU_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES`; if these are unset it falls back to a single CPU worker. Each worker process pins itself to a single GPU so only one training task runs on any given GPU at a time.
 
+### Running with Docker
+
+You can run the full stack (FastAPI, Celery worker, Redis) using the included `Dockerfile` and `docker-compose.yml`.
+
+1. `cp .env.example .env` and adjust anything project-specific. When running under Docker, keep the Redis URLs at their defaults or override them to `redis://redis:6379/...` (the compose file already does this).
+2. Place any training datasets under `./data` so they are mounted into the containers at `/app/data`. Model artifacts will persist under `./artifacts`.
+3. Build and start everything with:
+   ```bash
+   docker compose up --build -d
+   ```
+4. The API becomes available at [http://localhost:8000](http://localhost:8000). Use `docker compose logs -f api` or `docker compose logs -f worker` to follow service logs.
+
+Stop the stack with `docker compose down` (add `-v` to wipe the Redis volume if needed).
+
+### Automated Image Publishing
+
+A GitHub Actions workflow (`.github/workflows/docker-build-push.yml`) builds the Docker image and pushes it to `crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train` on every push to `main`, any `v*` tag, or manual dispatch. Define the secrets `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD` in the repository so the workflow can log in. Each run publishes `latest` (for the default branch), a `sha-<git-sha>` tag, and any matching git tag.
+
 ### APIs
 The service exposes REST endpoints under `/api/v1/training/tasks`. Key operations:
 - `POST /training/tasks` – submit a training job (see `docs/api.md` for payload schema)

@@ -1,0 +1,45 @@
+version: "3.9"
+
+x-app-base: &app-base
+  build:
+    context: .
+  env_file:
+    - .env
+  environment:
+    REDIS_URL: redis://redis:6379/0
+    CELERY_BROKER_URL: redis://redis:6379/1
+    CELERY_RESULT_BACKEND: redis://redis:6379/1
+  volumes:
+    - ./artifacts:/app/artifacts
+    - ./data:/app/data
+  depends_on:
+    - redis
+  restart: unless-stopped
+
+services:
+  redis:
+    image: m.daocloud.io/docker.io/redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    <<: *app-base
+    ports:
+      - "8000:8000"
+    command: ["uv", "run", "python", "main.py", "api", "--host", "0.0.0.0", "--port", "8000"]
+
+  worker:
+    <<: *app-base
+    command: ["uv", "run", "python", "main.py", "worker"]
+
+volumes:
+  artifacts:
+  redis-data:
