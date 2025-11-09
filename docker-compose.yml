@@ -1,8 +1,7 @@
 version: "3.9"
 
 x-app-base: &app-base
-  build:
-    context: .
+  image: crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train:${DX_IMAGE_TAG:-latest}
   env_file:
     - .env
   environment:

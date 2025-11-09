@@ -40,11 +40,13 @@ You can run the full stack (FastAPI, Celery worker, Redis) using the included `D
 
 1. `cp .env.example .env` and adjust anything project-specific. When running under Docker, keep the Redis URLs at their defaults or override them to `redis://redis:6379/...` (the compose file already does this).
 2. Place any training datasets under `./data` so they are mounted into the containers at `/app/data`. Model artifacts will persist under `./artifacts`.
-3. Build and start everything with:
+3. (Optional) Set `DX_IMAGE_TAG` in `.env` if you need a specific published tag; it defaults to `latest`.
+4. Start everything with:
    ```bash
-   docker compose up --build -d
+   docker compose up -d
    ```
-4. The API becomes available at [http://localhost:8000](http://localhost:8000). Use `docker compose logs -f api` or `docker compose logs -f worker` to follow service logs.
+   Run `docker compose pull` whenever you bump `DX_IMAGE_TAG` to grab the latest pushed image.
+5. The API becomes available at [http://localhost:8000](http://localhost:8000). Use `docker compose logs -f api` or `docker compose logs -f worker` to follow service logs.
 
 Stop the stack with `docker compose down` (add `-v` to wipe the Redis volume if needed).
 
