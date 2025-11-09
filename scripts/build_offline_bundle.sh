@@ -71,10 +71,10 @@ sanitize_image_name() {
   echo "$1" | sed 's#/#_#g; s#:#-#g'
 }
 
-mkdir -p "$TARGET_DIR"/{images,models,compose,data,artifacts}
+mkdir -p "$TARGET_DIR"/{images,models,data,artifacts}
 
-cp "$REPO_ROOT/docker-compose.yml" "$TARGET_DIR/compose/docker-compose.yml"
-cp "$REPO_ROOT/.env.offline.example" "$TARGET_DIR/compose/.env.example"
+cp "$REPO_ROOT/docker-compose.yml" "$TARGET_DIR/docker-compose.yml"
+cp "$REPO_ROOT/.env.offline.example" "$TARGET_DIR/.env.example"
 
 IMAGE_LIST=("$APP_IMAGE" "$REDIS_IMAGE")
 

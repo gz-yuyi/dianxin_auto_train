@@ -58,7 +58,7 @@ For 运维 environments without Internet access, generate a self-contained bundl
 ./scripts/build_offline_bundle.sh --output ./offline_bundle
 ```
 
-The script pulls the application + Redis images, exports them to `images/*.tar`, downloads the default pretrained model from ModelScope into `models/`, copies `docker-compose.yml` and `.env.offline.example`, and finally emits `<bundle>.tar.gz`. Transfer the archive to the offline host, run `docker load -i images/<name>.tar` for each image, copy `.env.offline.example` to `.env`, and start the stack from the `compose/` directory with `docker compose up -d`. See `docs/offline_deployment.md` for the full workflow.
+The script pulls the application + Redis images, exports them to `images/*.tar`, downloads the default pretrained model from ModelScope into `models/`, places `docker-compose.yml` and `.env.example` at the bundle root, and finally emits `<bundle>.tar.gz`. Transfer the archive to the offline host, run `docker load -i images/<name>.tar` for each image, copy `.env.example` to `.env`, and start the stack from the bundle directory with `docker compose up -d`. See `docs/offline_deployment.md` for the full workflow.
 
 ### Automated Image Publishing
 

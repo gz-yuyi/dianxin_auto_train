@@ -24,11 +24,10 @@
 
 ```
 offline_bundle_<timestamp>/
+├── docker-compose.yml    # 与 models 同目录，卷映射立即生效
+├── .env.example          # 复制为 .env 后修改
 ├── images/               # 保存好的 Docker 镜像
 ├── models/<model>/       # 预下载模型（默认 bert-base-chinese）
-├── compose/
-│   ├── docker-compose.yml
-│   └── .env.example      # 复制为 .env 后修改
 ├── data/                 # 放训练数据
 ├── artifacts/            # 模型输出目录
 ├── README_OFFLINE.md     # 本文
@@ -46,11 +45,14 @@ offline_bundle_<timestamp>/
    ```bash
    for image in images/*.tar; do docker load -i "$image"; done
    ```
-3. 进入 `compose/`，根据 `.env.example` 生成 `.env`，确保 `DX_IMAGE_TAG` 与镜像一致。
+3. 在离线包根目录复制 `.env`：
+   ```bash
+   cp .env.example .env
+   ```
+   根据实际环境修改其中变量，确保 `DX_IMAGE_TAG` 与镜像一致。
 4. 如需训练数据，放入 `data/`；模型已挂载在 `/app/models/<model>`，提交任务时把 `base_model` 指向该路径即可。
 5. 启动服务：
    ```bash
-   cd compose
    docker compose up -d
    ```
 6. 如果需要升级，重新在在线环境生成离线包并替换旧目录与镜像。
