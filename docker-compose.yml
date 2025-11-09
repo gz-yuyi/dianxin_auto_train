@@ -11,6 +11,7 @@ x-app-base: &app-base
   volumes:
     - ./artifacts:/app/artifacts
     - ./data:/app/data
+    - ./models:/app/models
   depends_on:
     - redis
   restart: unless-stopped

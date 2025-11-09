@@ -50,6 +50,16 @@ You can run the full stack (FastAPI, Celery worker, Redis) using the included `D
 
 Stop the stack with `docker compose down` (add `-v` to wipe the Redis volume if needed).
 
+### Offline Deployment
+
+For 运维 environments without Internet access, generate a self-contained bundle on an online machine:
+
+```bash
+./scripts/build_offline_bundle.sh --output ./offline_bundle
+```
+
+The script pulls the application + Redis images, exports them to `images/*.tar`, downloads the default pretrained model from ModelScope into `models/`, copies `docker-compose.yml` and `.env.offline.example`, and finally emits `<bundle>.tar.gz`. Transfer the archive to the offline host, run `docker load -i images/<name>.tar` for each image, copy `.env.offline.example` to `.env`, and start the stack from the `compose/` directory with `docker compose up -d`. See `docs/offline_deployment.md` for the full workflow.
+
 ### Automated Image Publishing
 
 A GitHub Actions workflow (`.github/workflows/docker-build-push.yml`) builds the Docker image and pushes it to `crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train` on every push to `main`, any `v*` tag, or manual dispatch. Define the secrets `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD` in the repository so the workflow can log in. Each run publishes `latest` (for the default branch), a `sha-<git-sha>` tag, and any matching git tag.
