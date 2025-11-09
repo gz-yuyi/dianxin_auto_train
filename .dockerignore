@@ -12,3 +12,4 @@ __pycache__/
 artifacts/
 docs/_build/
 .DS_Store
+offline_bundle*
