@@ -50,6 +50,16 @@ You can run the full stack (FastAPI, Celery worker, Redis) using the included `D
 
 Stop the stack with `docker compose down` (add `-v` to wipe the Redis volume if needed).
 
+### GPU Acceleration (optional)
+
+- Install [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host so Docker can access the GPU driver.
+- Copy `.env.example` to `.env` and adjust `DX_GPU_COUNT`, `NVIDIA_VISIBLE_DEVICES`, and `NVIDIA_DRIVER_CAPABILITIES` if you need to expose a subset of GPUs.
+- Start the stack with the GPU override together with the base compose file:
+  ```bash
+  docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+  ```
+  Skip the override file if you are on a CPU-only host—the same image falls back to CPU execution automatically.
+
 ### Offline Deployment
 
 For 运维 environments without Internet access, generate a self-contained bundle on an online machine:
@@ -58,7 +68,7 @@ For 运维 environments without Internet access, generate a self-contained bundl
 ./scripts/build_offline_bundle.sh --output ./offline_bundle
 ```
 
-The script pulls the application + Redis images, exports them to `images/*.tar`, downloads the default pretrained model from ModelScope into `models/`, places `docker-compose.yml` and `.env.example` at the bundle root, and finally emits `<bundle>.tar.gz`. Transfer the archive to the offline host, run `docker load -i images/<name>.tar` for each image, copy `.env.example` to `.env`, and start the stack from the bundle directory with `docker compose up -d`. See `docs/offline_deployment.md` for the full workflow.
+The script pulls the application + Redis images, exports them to `images/*.tar`, downloads the default pretrained model from ModelScope into `models/`, places `docker-compose.yml`, `docker-compose.gpu.yml`, and `.env.example` at the bundle root, and finally emits `<bundle>.tar.gz`. Transfer the archive to the offline host, run `docker load -i images/<name>.tar` for each image, copy `.env.example` to `.env`, and start the stack from the bundle directory with `docker compose up -d` (add `-f docker-compose.gpu.yml` if the offline host has NVIDIA GPUs). See `docs/offline_deployment.md` for the full workflow.
 
 ### Automated Image Publishing
 

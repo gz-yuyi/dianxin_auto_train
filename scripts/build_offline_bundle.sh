@@ -74,6 +74,7 @@ sanitize_image_name() {
 mkdir -p "$TARGET_DIR"/{images,models,data,artifacts}
 
 cp "$REPO_ROOT/docker-compose.yml" "$TARGET_DIR/docker-compose.yml"
+cp "$REPO_ROOT/docker-compose.gpu.yml" "$TARGET_DIR/docker-compose.gpu.yml"
 cp "$REPO_ROOT/.env.offline.example" "$TARGET_DIR/.env.example"
 
 IMAGE_LIST=("$APP_IMAGE" "$REDIS_IMAGE")
@@ -113,10 +114,11 @@ Model name: ${MODEL_NAME}
 Model directory name: ${MODEL_DIR_NAME}
 
 Contents:
+- docker-compose.yml
+- docker-compose.gpu.yml (optional NVIDIA override)
+- .env.example
 - images/ (docker save archives)
 - models/${MODEL_DIR_NAME} (pre-downloaded model)
-- compose/docker-compose.yml
-- compose/.env.example
 - data/ (drop training data here)
 - artifacts/ (model outputs)
 EOF
@@ -130,6 +132,6 @@ Offline bundle ready:
 - Archive: $ARCHIVE_PATH
 
 Copy the archive to the offline machine, extract it, run
-'docker load' for each tarball under images/, adjust .env based on compose/.env.example,
-and start the stack with 'docker compose up -d'.
+'docker load' for each tarball under images/, adjust .env based on the bundled .env.example,
+and start the stack with 'docker compose up -d' (combine with docker-compose.gpu.yml if GPUs are available).
 EOF

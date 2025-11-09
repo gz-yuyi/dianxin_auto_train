@@ -18,13 +18,14 @@
    - `APP_IMAGE` / `REDIS_IMAGE`：镜像完整地址，可指向自有镜像仓库
    - `MODEL_NAME` / `MODEL_SOURCE` / `MODEL_DIR_NAME`：指定要预下载的模型及落盘名称（默认从 ModelScope 下载 `google-bert/bert-base-chinese`，落盘目录名 `bert-base-chinese`）
    - `-o/--output`：离线包输出目录，默认 `./offline_bundle_<timestamp>`
-3. 脚本会完成：拉取镜像并 `docker save` 到 `images/`，下载模型到 `models/`，复制 `docker-compose.yml`、`.env.offline.example` 和说明文档到 `compose/`，最后生成同名 `.tar.gz` 压缩包。
+3. 脚本会完成：拉取镜像并 `docker save` 到 `images/`，下载模型到 `models/`，复制 `docker-compose.yml`、`docker-compose.gpu.yml`、`.env.offline.example` 和说明文档到输出目录，最后生成同名 `.tar.gz` 压缩包。
 
 ### 二、离线包结构
 
 ```
 offline_bundle_<timestamp>/
-├── docker-compose.yml    # 与 models 同目录，卷映射立即生效
+├── docker-compose.yml
+├── docker-compose.gpu.yml # 可选 GPU 覆写文件
 ├── .env.example          # 复制为 .env 后修改
 ├── images/               # 保存好的 Docker 镜像
 ├── models/<model>/       # 预下载模型（默认 bert-base-chinese）
@@ -51,14 +52,19 @@ offline_bundle_<timestamp>/
    ```
    根据实际环境修改其中变量，确保 `DX_IMAGE_TAG` 与镜像一致。
 4. 如需训练数据，放入 `data/`；模型已挂载在 `/app/models/<model>`，提交任务时把 `base_model` 指向该路径即可。
-5. 启动服务：
+5. 启动服务（CPU-only）：
    ```bash
    docker compose up -d
    ```
-6. 如果需要升级，重新在在线环境生成离线包并替换旧目录与镜像。
+6. 若目标机器具备 NVIDIA GPU，并已安装 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)，可使用 GPU 覆写文件启动：
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+   ```
+   `.env` 内的 `DX_GPU_COUNT`、`NVIDIA_VISIBLE_DEVICES`、`NVIDIA_DRIVER_CAPABILITIES` 可控制暴露的 GPU 数量及能力；不需要 GPU 时保持默认即可。
+7. 如果需要升级，重新在在线环境生成离线包并替换旧目录与镜像。
 
 ### 四、补充说明
 
-- 目标机器只需安装 Docker 即可运行。
+- CPU 环境只需 Docker 即可运行；如需 GPU，请额外安装 NVIDIA 驱动及 Container Toolkit。
 - 若需添加新的预训练模型，重新执行脚本并覆盖 `models/` 内容。
 - 脚本会保留解压目录与压缩包，方便二次检查或增量更新。
