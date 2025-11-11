@@ -32,11 +32,11 @@ services:
     <<: *app-base
     ports:
       - "8000:8000"
-    command: ["uv", "run", "python", "main.py", "api", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["api", "--host", "0.0.0.0", "--port", "8000"]
 
   worker:
     <<: *app-base
-    command: ["uv", "run", "python", "main.py", "worker"]
+    command: ["worker"]
 
 volumes:
   artifacts:
