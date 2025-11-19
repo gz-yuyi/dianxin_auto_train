@@ -20,7 +20,7 @@ def build_sample_payload(training_data_file: str) -> dict[str, Any]:
         "base_model": "bert-base-chinese",
         "hyperparameters": {
             "learning_rate": 3e-5,
-            "epochs": 1,
+            "epochs": 2,
             "batch_size": 8,
             "max_sequence_length": 128,
             "random_seed": 42,

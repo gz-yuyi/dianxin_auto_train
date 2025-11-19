@@ -140,6 +140,7 @@ def run_training_loop(
     task_id: str,
     request_payload: dict,
     progress_handler: Callable[[int, dict[str, float]], None],
+    batch_progress_handler: Callable[[int, int, dict[str, float]], None],
     stop_requested: Callable[[], bool],
 ) -> dict:
     hp = request_payload["hyperparameters"]
@@ -166,7 +167,8 @@ def run_training_loop(
 
     output_dir = get_model_output_dir() / task_id
     output_dir.mkdir(parents=True, exist_ok=True)
-    label_mapping_path = output_dir / "label_mappings.pkl"
+    best_model_path = output_dir / f"{request_payload['model_name_en']}.pt"
+    label_mapping_path = output_dir / f"{request_payload['model_name_en']}.pt.pkl"
     save_label_mappings(label_mapping_path, label_to_id, id_to_label)
 
     model = BertClassifier(request_payload["base_model"], output_dim=len(label_to_id))
@@ -177,7 +179,6 @@ def run_training_loop(
     optimizer = Adam(model.parameters(), lr=hp["learning_rate"])
 
     best_val_accuracy = 0.0
-    best_model_path = output_dir / f"{request_payload['model_name_en']}.pt"
 
     total_epochs = hp["epochs"]
 
@@ -194,8 +195,9 @@ def run_training_loop(
         total_acc_train = 0.0
         total_loss_train = 0.0
         sample_count_train = 0
+        total_batches = len(train_loader)
 
-        for inputs, labels in train_loader:
+        for batch_idx, (inputs, labels) in enumerate(train_loader):
             input_ids = inputs["input_ids"].squeeze(1).to(device)
             attention_mask = inputs["attention_mask"].squeeze(1).to(device)
             labels = torch.tensor(labels, device=device)
@@ -209,6 +211,31 @@ def run_training_loop(
             total_acc_train += (predictions == labels).sum().item()
             total_loss_train += loss.item() * labels.size(0)
             sample_count_train += labels.size(0)
+            
+            # Calculate batch progress within current epoch
+            batch_progress = float((batch_idx + 1) * 100.0 / total_batches)
+            batch_metrics = {
+                "epoch": epoch_index + 1,
+                "total_epochs": total_epochs,
+                "batch": batch_idx + 1,
+                "total_batches": total_batches,
+                "batch_progress_percentage": batch_progress,
+                "train_accuracy": total_acc_train / sample_count_train if sample_count_train else 0.0,
+                "train_loss": total_loss_train / sample_count_train if sample_count_train else 0.0,
+                "val_accuracy": None,
+                "val_loss": None,
+                "callback_url": callback_url,
+            }
+            batch_progress_handler(epoch_index + 1, batch_idx + 1, batch_metrics)
+            
+            # Check for stop request after each batch
+            if stop_requested():
+                logger.info("Stop requested for task {}", task_id)
+                return {
+                    "status": "stopped",
+                    "model_path": str(best_model_path),
+                    "label_mapping_path": str(label_mapping_path),
+                }
 
         model.eval()
         total_acc_val = 0.0
@@ -244,7 +271,7 @@ def run_training_loop(
             "val_accuracy": val_accuracy,
             "val_loss": val_loss,
             "f1_score": f1,
-            "progress_percentage": float((epoch_index + 1) * 100.0 / total_epochs),
+            "progress_percentage": 100.0,  # Epoch is complete, so progress within epoch is 100%
             "callback_url": callback_url,
         }
         logger.info(

@@ -27,6 +27,8 @@ class TrainingTaskCreateRequest(BaseModel):
 class TaskProgress(BaseModel):
     current_epoch: int | None = None
     total_epochs: int | None = None
+    current_batch: int | None = None
+    total_batches: int | None = None
     progress_percentage: float | None = None
     train_accuracy: float | None = None
     train_loss: float | None = None

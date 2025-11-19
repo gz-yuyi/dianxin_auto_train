@@ -32,6 +32,8 @@ def start_training_task(self, task_id: str) -> dict:
             "progress": {
                 "current_epoch": 0,
                 "total_epochs": request_payload["hyperparameters"]["epochs"],
+                "current_batch": None,
+                "total_batches": None,
                 "progress_percentage": 0.0,
                 "train_accuracy": None,
                 "train_loss": None,
@@ -64,11 +66,45 @@ def start_training_task(self, task_id: str) -> dict:
         send_progress_callback(task_id, epoch, metrics, request_payload.get("callback_url"))
         send_external_epoch_callback(task_id, epoch, metrics)
         logger.info(
-            "Task {} progress {:.1f}% (epoch {}/{})",
+            "Task {} epoch {}/{} completed with metrics: train_acc={:.3f}, val_acc={:.3f}, f1={:.3f}",
             task_id,
-            metrics["progress_percentage"],
             epoch,
             metrics["total_epochs"],
+            metrics["train_accuracy"],
+            metrics["val_accuracy"],
+            metrics.get("f1_score", 0),
+        )
+
+    def batch_progress_handler(epoch: int, batch: int, metrics: dict) -> None:
+        progress_data = {
+            "current_epoch": epoch,
+            "total_epochs": metrics["total_epochs"],
+            "current_batch": batch,
+            "total_batches": metrics["total_batches"],
+            "progress_percentage": metrics["batch_progress_percentage"],
+            "train_accuracy": metrics["train_accuracy"],
+            "train_loss": metrics["train_loss"],
+            "val_accuracy": None,
+            "val_loss": None,
+        }
+        update_task_record(
+            task_id,
+            {
+                "progress": progress_data,
+                "status": "training",
+            },
+        )
+        self.update_state(state="PROGRESS", meta=progress_data)
+        logger.info(
+            "Task {} epoch {}/{}, batch {}/{} - Progress: {:.1f}%, Train Acc: {:.3f}, Train Loss: {:.3f}",
+            task_id,
+            epoch,
+            metrics["total_epochs"],
+            batch,
+            metrics["total_batches"],
+            metrics["batch_progress_percentage"],
+            metrics["train_accuracy"],
+            metrics["train_loss"],
         )
 
     def stop_checker() -> bool:
@@ -79,6 +115,7 @@ def start_training_task(self, task_id: str) -> dict:
             task_id=task_id,
             request_payload=request_payload,
             progress_handler=progress_handler,
+            batch_progress_handler=batch_progress_handler,
             stop_requested=stop_checker,
         )
     except Exception as exc:
@@ -114,6 +151,8 @@ def start_training_task(self, task_id: str) -> dict:
                 "progress": {
                     "current_epoch": request_payload["hyperparameters"]["epochs"],
                     "total_epochs": request_payload["hyperparameters"]["epochs"],
+                    "current_batch": None,
+                    "total_batches": None,
                     "progress_percentage": 100.0,
                     "train_accuracy": None,
                     "train_loss": None,

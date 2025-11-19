@@ -50,7 +50,7 @@ def start_worker() -> None:
     show_default=True,
 )
 def check_service(host: str, port: int, dataset: str | None, cleanup: bool) -> None:
-    base_url = f"http://{host}:{port}/api/v1"
+    base_url = f"http://{host}:{port}/"
     run_service_check(base_url, dataset, cleanup)
 
 
