@@ -5,7 +5,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    UV_LINK_MODE=copy \
+    UV_LINK_MODE=hardlink \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
@@ -23,7 +23,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 
 COPY pyproject.toml uv.lock .python-version ./
 
-RUN uv sync --frozen --no-dev --no-cache
+# Use hardlinks when populating the venv to avoid doubling disk usage during installs
+RUN uv sync --frozen --no-dev
 
 COPY . .
 
