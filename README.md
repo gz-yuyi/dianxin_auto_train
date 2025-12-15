@@ -84,3 +84,38 @@ The service exposes REST endpoints under `/api/v1/training/tasks`. Key operation
 
 ### Callbacks
 Each epoch publishes progress to any `callback_url` provided in the submission and to the external endpoints defined in `.env` (`EXTERNAL_CALLBACK_BASE_URL` / `EXTERNAL_PUBLISH_CALLBACK_URL`). See `docs/external_callback.md` for payload formats.
+
+### Inference for Trained Models
+
+Use the new CLI script `inference.py` (does not change the legacy scripts) to run predictions with trained checkpoints:
+
+- 多选一分类：
+  ```bash
+  uv run python inference.py multi-class \
+    --excel legacy/环境保护_空气污染--样例1000.xlsx \
+    --text-column 内容合并 \
+    --model-path artifacts/<task_id>/<model_name>.pt \
+    --label-mapping artifacts/<task_id>/<model_name>.pt.pkl \
+    --base-model bert-base-chinese \
+    --max-length 512 \
+    --top-n 3 \
+    --device auto
+  ```
+- 单标签是否判断：
+  ```bash
+  uv run python inference.py single-judge \
+    --excel <input>.xlsx --text-column 内容合并 --label-column 标签列 \
+    --model-path artifacts/<task_id>/<model_name>.pt \
+    --label-mapping artifacts/<task_id>/<model_name>.pt.pkl \
+    --top-k 2 --threshold 0.4
+  ```
+- 多标签判断（按列名前缀匹配多个标签列，例如 `label_1`, `label_2`）：
+  ```bash
+  uv run python inference.py multi-judge \
+    --excel <input>.xlsx --text-column 内容合并 --label-prefix label_ \
+    --model-path artifacts/<task_id>/<model_name>.pt \
+    --label-mapping artifacts/<task_id>/<model_name>.pt.pkl \
+    --top-k 2 --threshold 0.4
+  ```
+
+All commands support `--sheet` to select a specific Excel sheet, `--output` to set the output file name, and `--device` to force `cpu` / `cuda:0`. The defaults keep `max_length=512` and `base-model=bert-base-chinese`; adjust them to match how the model was trained.
