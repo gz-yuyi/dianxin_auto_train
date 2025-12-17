@@ -79,26 +79,31 @@ def predict_batch(
     max_length: int,
     id_to_label: dict[int, str],
     device: torch.device,
+    batch_size: int,
 ) -> tuple[list[str], list[list[tuple[str, float]]], list[dict[str, float]]]:
-    input_ids, attention_mask = tokenize_texts(texts, tokenizer, max_length, device)
-    with torch.no_grad():
-        outputs = model(input_ids, attention_mask)
-        probs = F.softmax(outputs, dim=1)
-    probabilities = probs.cpu().numpy()
-    labels = []
+    labels: list[str] = []
     top_all: list[list[tuple[str, float]]] = []
     label_prob_dicts: list[dict[str, float]] = []
 
-    for row in probabilities:
-        label_prob_dict = {
-            id_to_label[idx]: float(prob) for idx, prob in enumerate(row)
-        }
-        label_prob_dicts.append(label_prob_dict)
-        sorted_items = sorted(
-            label_prob_dict.items(), key=lambda item: item[1], reverse=True
+    for start in range(0, len(texts), batch_size):
+        batch_texts = texts[start : start + batch_size]
+        input_ids, attention_mask = tokenize_texts(
+            batch_texts, tokenizer, max_length, device
         )
-        top_all.append(sorted_items)
-        labels.append(sorted_items[0][0])
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask)
+            probs = F.softmax(outputs, dim=1).cpu().numpy()
+
+        for row in probs:
+            label_prob_dict = {
+                id_to_label[idx]: float(prob) for idx, prob in enumerate(row)
+            }
+            label_prob_dicts.append(label_prob_dict)
+            sorted_items = sorted(
+                label_prob_dict.items(), key=lambda item: item[1], reverse=True
+            )
+            top_all.append(sorted_items)
+            labels.append(sorted_items[0][0])
 
     return labels, top_all, label_prob_dicts
 
@@ -149,6 +154,9 @@ def cli() -> None:
     "--device", default="auto", show_default=True, help="推理设备，如 auto/cpu/cuda:0"
 )
 @click.option(
+    "--batch-size", default=16, show_default=True, type=int, help="推理批大小"
+)
+@click.option(
     "--output",
     default=None,
     type=click.Path(dir_okay=False),
@@ -164,6 +172,7 @@ def multi_class(
     max_length: int,
     top_n: int,
     device: str,
+    batch_size: int,
     output: str | None,
 ) -> None:
     """多选一分类，输出 Top-N 结果。"""
@@ -179,7 +188,13 @@ def multi_class(
     texts = df[text_column].tolist()
 
     labels, top_all, _ = predict_batch(
-        texts, model, tokenizer, max_length, id2label, device_resolved
+        texts,
+        model,
+        tokenizer,
+        max_length,
+        id2label,
+        device_resolved,
+        batch_size,
     )
     df["Prediction"] = labels
 
@@ -242,6 +257,9 @@ def multi_class(
     "--device", default="auto", show_default=True, help="推理设备，如 auto/cpu/cuda:0"
 )
 @click.option(
+    "--batch-size", default=16, show_default=True, type=int, help="推理批大小"
+)
+@click.option(
     "--output",
     default=None,
     type=click.Path(dir_okay=False),
@@ -259,6 +277,7 @@ def single_judge(
     top_k: int,
     threshold: float,
     device: str,
+    batch_size: int,
     output: str | None,
 ) -> None:
     """单标签是否判断。"""
@@ -275,7 +294,13 @@ def single_judge(
     topics = df[label_column].astype(str).tolist()
 
     _, top_all, label_prob_dicts = predict_batch(
-        texts, model, tokenizer, max_length, id2label, device_resolved
+        texts,
+        model,
+        tokenizer,
+        max_length,
+        id2label,
+        device_resolved,
+        batch_size,
     )
 
     def judge(prob_dict: dict[str, float], topic: str) -> str:
@@ -345,6 +370,9 @@ def single_judge(
     "--device", default="auto", show_default=True, help="推理设备，如 auto/cpu/cuda:0"
 )
 @click.option(
+    "--batch-size", default=16, show_default=True, type=int, help="推理批大小"
+)
+@click.option(
     "--output",
     default=None,
     type=click.Path(dir_okay=False),
@@ -362,6 +390,7 @@ def multi_judge(
     top_k: int,
     threshold: float,
     device: str,
+    batch_size: int,
     output: str | None,
 ) -> None:
     """多标签是否判断。"""
@@ -384,7 +413,13 @@ def multi_judge(
     ]
 
     _, _, label_prob_dicts = predict_batch(
-        texts, model, tokenizer, max_length, id2label, device_resolved
+        texts,
+        model,
+        tokenizer,
+        max_length,
+        id2label,
+        device_resolved,
+        batch_size,
     )
 
     def judge(prob_dict: dict[str, float], topics: Iterable[str]) -> list[str]:

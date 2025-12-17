@@ -96,7 +96,8 @@ def prepare_dataframe(
     dataframe[text_column] = dataframe[text_column].astype(str).fillna("")
     labels = dataframe[label_column].astype(str)
     dataframe[label_column] = labels
-    unique_labels = sorted(labels.unique())
+    # Align with legacy/Bert_Train_Sample_V1.py: keep appearance order (no sorting).
+    unique_labels = list(labels.unique())
     label_to_id = {label: idx for idx, label in enumerate(unique_labels)}
     id_to_label = {idx: label for label, idx in label_to_id.items()}
     dataframe[label_column] = dataframe[label_column].map(label_to_id)
@@ -110,17 +111,19 @@ def build_dataloaders(
     text_column: str,
     label_column: str,
 ) -> tuple[DataLoader, DataLoader, int]:
+    # Align with legacy/Bert_Train_Sample_V1.py: dataset split uses a fixed random_state=42
+    # (independent from training random seed).
     train_df, holdout_df = train_test_split(
         dataframe,
         test_size=hp["train_val_split"],
         stratify=None,
-        random_state=hp["random_seed"],
+        random_state=42,
     )
     dev_df, _ = train_test_split(
         holdout_df,
         test_size=0.5,
         stratify=None,
-        random_state=hp["random_seed"],
+        random_state=42,
     )
 
     train_dataset = TextClassificationDataset(train_df, tokenizer, text_column, label_column, hp["max_sequence_length"])
@@ -167,8 +170,13 @@ def run_training_loop(
 
     output_dir = get_model_output_dir() / task_id
     output_dir.mkdir(parents=True, exist_ok=True)
-    best_model_path = output_dir / f"{request_payload['model_name_en']}.pt"
-    label_mapping_path = output_dir / f"{request_payload['model_name_en']}.pt.pkl"
+    # Artifacts naming convention:
+    # - model weights: <name>.pt
+    # - label mappings: <name>.pt.pkl
+    model_name_en = request_payload["model_name_en"]
+    model_filename = model_name_en if model_name_en.endswith(".pt") else f"{model_name_en}.pt"
+    best_model_path = output_dir / model_filename
+    label_mapping_path = output_dir / f"{model_filename}.pkl"
     save_label_mappings(label_mapping_path, label_to_id, id_to_label)
 
     model = BertClassifier(request_payload["base_model"], output_dim=len(label_to_id))
@@ -200,7 +208,7 @@ def run_training_loop(
         for batch_idx, (inputs, labels) in enumerate(train_loader):
             input_ids = inputs["input_ids"].squeeze(1).to(device)
             attention_mask = inputs["attention_mask"].squeeze(1).to(device)
-            labels = torch.tensor(labels, device=device)
+            labels = labels.to(device)
             outputs = model(input_ids, attention_mask)
             loss = criterion(outputs, labels)
             loss.backward()
@@ -247,15 +255,15 @@ def run_training_loop(
             for inputs, labels in dev_loader:
                 input_ids = inputs["input_ids"].squeeze(1).to(device)
                 attention_mask = inputs["attention_mask"].squeeze(1).to(device)
-                labels_tensor = torch.tensor(labels, device=device)
+                labels = labels.to(device)
                 outputs = model(input_ids, attention_mask)
-                loss = criterion(outputs, labels_tensor)
+                loss = criterion(outputs, labels)
                 predictions = outputs.argmax(dim=1)
 
-                total_acc_val += (predictions == labels_tensor).sum().item()
-                total_loss_val += loss.item() * labels_tensor.size(0)
+                total_acc_val += (predictions == labels).sum().item()
+                total_loss_val += loss.item() * labels.size(0)
                 predictions_list.extend(predictions.cpu().tolist())
-                references_list.extend(labels)
+                references_list.extend(labels.cpu().tolist())
 
         train_accuracy = total_acc_train / sample_count_train if sample_count_train else 0.0
         train_loss = total_loss_train / sample_count_train if sample_count_train else 0.0
