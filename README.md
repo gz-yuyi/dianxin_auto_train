@@ -34,6 +34,19 @@ uv run python main.py check-service --host 127.0.0.1 --port 8000
 
 The worker automatically sets its concurrency from `GPU_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES`; if these are unset it falls back to a single CPU worker. Each worker process pins itself to a single GPU so only one training task runs on any given GPU at a time.
 
+### Local Training (CLI)
+You can run training directly without the API or Celery worker by using the `train` subcommand. It accepts the same JSON payload as the API and defaults to no callbacks.
+
+```bash
+echo '{"model_name_cn":"数研测试_扬言类别(全量数据-v3)","model_name_en":"test_yangyan6","training_data_file":"3_扬言_2025-12-03_06-42-31_2025-12-17_03-45-18_2025-12-17_03-46-16.xlsx","base_model":"/app/models/bert-base-chinese","hyperparameters":{"learning_rate":3.0E-5,"epochs":5,"batch_size":64,"max_sequence_length":512,"random_seed":1999,"train_val_split":0.2,"text_column":"文本内容","label_column":"标签列"},"callback_url":"http://10.196.193.98:8089/service"}' | uv run python main.py train --payload -
+```
+
+To enable callbacks, add `--callback`:
+
+```bash
+uv run python main.py train --payload-file payload.json --callback
+```
+
 ### Running with Docker
 
 You can run the full stack (FastAPI, Celery worker, Redis) using the included `Dockerfile` and `docker-compose.yml`.
