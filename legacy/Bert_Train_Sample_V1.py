@@ -1,3 +1,4 @@
+import argparse
 import pickle
 import warnings
 import numpy as np
@@ -13,8 +14,18 @@ from sklearn.model_selection import train_test_split
 from torch.optim import Adam
 from tqdm import tqdm
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--bert-path", default="bert-base-chinese")
+parser.add_argument("--model-filename", default="wenchong.pt")
+parser.add_argument("--save-path", default=r"C:\Users\admin\Desktop\蚊虫")
+parser.add_argument("--data-filename", default=r"C:\Users\admin\Desktop\蚊虫\登革热.xlsx")
+parser.add_argument("--sheetname", default="原始数据")
+parser.add_argument("--column-name", default="内容合并")
+parser.add_argument("--label-name", default="标签")
+args = parser.parse_args()
+
 # 下载的预训练文件路径
-BERT_PATH = 'bert-base-chinese'
+BERT_PATH = args.bert_path
 tokenizer = BertTokenizer.from_pretrained(BERT_PATH)
 #忽视警告
 warnings.filterwarnings("ignore", message="1Torch was not compiled with flash attention")
@@ -24,12 +35,12 @@ LABEL2ID = {}
 ID2LABEL = {}
 
 #文件路径
-model_filename='wenchong.pt'
-save_path = r"C:\Users\admin\Desktop\蚊虫"  #文件夹
-filename = os.path.join(save_path, r'C:\Users\admin\Desktop\蚊虫\登革热.xlsx')      #工作表
-sheetname = '原始数据'         # 工作表名
-column_name = "内容合并"      #文本列
-label_name = "标签"        #标签列
+model_filename = args.model_filename
+save_path = args.save_path  #文件夹
+filename = os.path.join(save_path, args.data_filename)      #工作表
+sheetname = args.sheetname         # 工作表名
+column_name = args.column_name      #文本列
+label_name = args.label_name        #标签列
 
 # 定义一个函数来读取文本文件并返回DataFrame
 def read_text_data(filename):
