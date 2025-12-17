@@ -217,4 +217,5 @@ __marimo__/
 
 artifacts/
 bert-base-chinese/
-offline_bundle
+offline_bundle*
+.vscode
