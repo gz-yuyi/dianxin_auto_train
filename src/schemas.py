@@ -9,7 +9,7 @@ class HyperParameters(BaseModel):
     batch_size: int = Field(64, ge=1, description="Batch size for training")
     max_sequence_length: int = Field(512, ge=8, description="Maximum token length")
     random_seed: int = Field(1999, description="Random seed for reproducibility")
-    train_val_split: float = Field(0.2, gt=0.0, lt=1.0, description="Holdout ratio")
+    train_val_split: float = Field(0.2, ge=0.0, lt=1.0, description="Holdout ratio (0 means no validation split)")
     text_column: str = Field(..., description="Name of text column in dataset")
     label_column: str = Field(..., description="Name of label column in dataset")
     sheet_name: str | None = Field(None, description="Excel sheet name if applicable")
