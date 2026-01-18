@@ -13,13 +13,13 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
-from transformers import BertModel, BertTokenizer
+from transformers import AutoModel, AutoTokenizer
 
 from src.config import get_data_root, get_model_output_dir
 
 
 class TextClassificationDataset(Dataset):
-    def __init__(self, dataframe: pd.DataFrame, tokenizer: BertTokenizer, text_column: str, label_column: str, max_length: int):
+    def __init__(self, dataframe: pd.DataFrame, tokenizer: AutoTokenizer, text_column: str, label_column: str, max_length: int):
         self.texts = [
             tokenizer(
                 text,
@@ -39,19 +39,30 @@ class TextClassificationDataset(Dataset):
         return self.texts[idx], self.labels[idx]
 
 
-class BertClassifier(nn.Module):
-    def __init__(self, base_model: str, output_dim: int, lora_config: dict | None = None):
+class TextClassifier(nn.Module):
+    def __init__(
+        self,
+        base_model: str,
+        output_dim: int,
+        lora_config: dict | None = None,
+        base_model_instance: nn.Module | None = None,
+    ):
         super().__init__()
         self.use_lora = lora_config is not None
-        self.bert = BertModel.from_pretrained(base_model)
+        self.bert = base_model_instance or AutoModel.from_pretrained(base_model)
         if lora_config is not None:
             self.bert = get_peft_model(self.bert, LoraConfig(**lora_config))
         self.dropout = nn.Dropout(0.5)
-        self.linear = nn.Linear(768, output_dim)
+        self.linear = nn.Linear(self.bert.config.hidden_size, output_dim)
         self.relu = nn.ReLU()
 
     def forward(self, input_ids, attention_mask):
-        _, pooled_output = self.bert(input_ids=input_ids, attention_mask=attention_mask, return_dict=False)
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
+        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+            pooled_output = outputs.pooler_output
+        else:
+            mask = attention_mask.unsqueeze(-1).type_as(outputs.last_hidden_state)
+            pooled_output = (outputs.last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-6)
         dropout_output = self.dropout(pooled_output)
         linear_output = self.linear(dropout_output)
         return self.relu(linear_output)
@@ -78,7 +89,7 @@ def normalize_lora_config(hp: dict) -> dict | None:
     }
 
 
-def configure_lora_trainables(model: BertClassifier) -> None:
+def configure_lora_trainables(model: TextClassifier) -> None:
     for name, param in model.bert.named_parameters():
         param.requires_grad = "lora_" in name
     for param in model.linear.parameters():
@@ -137,7 +148,7 @@ def prepare_dataframe(
 
 def build_dataloaders(
     dataframe: pd.DataFrame,
-    tokenizer: BertTokenizer,
+    tokenizer: AutoTokenizer,
     hp: dict,
     text_column: str,
     label_column: str,
@@ -195,7 +206,7 @@ def run_training_loop(
         label_column=hp["label_column"],
     )
     setup_seed(hp["random_seed"])
-    tokenizer = BertTokenizer.from_pretrained(request_payload["base_model"])
+    tokenizer = AutoTokenizer.from_pretrained(request_payload["base_model"])
     train_loader, dev_loader, dev_size = build_dataloaders(
         dataframe,
         tokenizer,
@@ -234,7 +245,7 @@ def run_training_loop(
         model.bert.save_pretrained(lora_adapter_path)
         torch.save(model.linear.state_dict(), classifier_head_path)
 
-    model = BertClassifier(request_payload["base_model"], output_dim=len(label_to_id), lora_config=lora_config)
+    model = TextClassifier(request_payload["base_model"], output_dim=len(label_to_id), lora_config=lora_config)
     device = select_device(task_id)
     logger.info("Task {} using device {}", task_id, device)
     model = model.to(device)

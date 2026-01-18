@@ -8,23 +8,28 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from peft import PeftModel
-from transformers import BertModel, BertTokenizer
+from transformers import AutoModel, AutoTokenizer
 
 
-class BertClassifier(nn.Module):
-    """Same architecture as the legacy training script."""
+class TextClassifier(nn.Module):
+    """Text classifier with pooled encoder output."""
 
-    def __init__(self, base_model: str, out_features: int, bert_model: nn.Module | None = None):
+    def __init__(self, base_model: str, out_features: int, base_model_instance: nn.Module | None = None):
         super().__init__()
-        self.bert = bert_model if bert_model is not None else BertModel.from_pretrained(base_model)
+        self.bert = base_model_instance or AutoModel.from_pretrained(base_model)
         self.dropout = nn.Dropout(0.5)
-        self.linear = nn.Linear(768, out_features)
+        self.linear = nn.Linear(self.bert.config.hidden_size, out_features)
         self.relu = nn.ReLU()
 
     def forward(self, input_ids, attention_mask):
-        _, pooled_output = self.bert(
-            input_ids=input_ids, attention_mask=attention_mask, return_dict=False
+        outputs = self.bert(
+            input_ids=input_ids, attention_mask=attention_mask, return_dict=True
         )
+        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+            pooled_output = outputs.pooler_output
+        else:
+            mask = attention_mask.unsqueeze(-1).type_as(outputs.last_hidden_state)
+            pooled_output = (outputs.last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-6)
         dropout_output = self.dropout(pooled_output)
         linear_output = self.linear(dropout_output)
         return self.relu(linear_output)
@@ -68,16 +73,16 @@ def load_model(
     num_labels: int,
     device: torch.device,
     lora_adapter_path: str | None = None,
-) -> BertClassifier:
+) -> TextClassifier:
     resolved_adapter_path = resolve_lora_adapter_path(model_path, lora_adapter_path)
     if resolved_adapter_path is not None:
-        base = BertModel.from_pretrained(base_model)
+        base = AutoModel.from_pretrained(base_model)
         bert = PeftModel.from_pretrained(base, resolved_adapter_path)
-        model = BertClassifier(base_model, out_features=num_labels, bert_model=bert)
+        model = TextClassifier(base_model, out_features=num_labels, base_model_instance=bert)
         head_state = torch.load(model_path, map_location=device)
         model.linear.load_state_dict(head_state)
     else:
-        model = BertClassifier(base_model, out_features=num_labels)
+        model = TextClassifier(base_model, out_features=num_labels)
         state_dict = torch.load(model_path, map_location=device)
         model.load_state_dict(state_dict)
     model.to(device)
@@ -87,7 +92,7 @@ def load_model(
 
 def tokenize_texts(
     texts: Sequence[str],
-    tokenizer: BertTokenizer,
+    tokenizer: AutoTokenizer,
     max_length: int,
     device: torch.device,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -103,8 +108,8 @@ def tokenize_texts(
 
 def predict_batch(
     texts: Sequence[str],
-    model: BertClassifier,
-    tokenizer: BertTokenizer,
+    model: TextClassifier,
+    tokenizer: AutoTokenizer,
     max_length: int,
     id_to_label: dict[int, str],
     device: torch.device,
@@ -221,7 +226,7 @@ def multi_class(
         device=device_resolved,
         lora_adapter_path=lora_adapter,
     )
-    tokenizer = BertTokenizer.from_pretrained(base_model)
+    tokenizer = AutoTokenizer.from_pretrained(base_model)
 
     df = pd.read_excel(excel_path, sheet_name=sheet_name)
     df[text_column] = df[text_column].astype(str).fillna("")
@@ -337,7 +342,7 @@ def single_judge(
         device=device_resolved,
         lora_adapter_path=lora_adapter,
     )
-    tokenizer = BertTokenizer.from_pretrained(base_model)
+    tokenizer = AutoTokenizer.from_pretrained(base_model)
 
     df = pd.read_excel(excel_path, sheet_name=sheet_name)
     df[text_column] = df[text_column].astype(str).fillna("")
@@ -461,7 +466,7 @@ def multi_judge(
         device=device_resolved,
         lora_adapter_path=lora_adapter,
     )
-    tokenizer = BertTokenizer.from_pretrained(base_model)
+    tokenizer = AutoTokenizer.from_pretrained(base_model)
 
     df = pd.read_excel(excel_path, sheet_name=sheet_name)
     df[text_column] = df[text_column].astype(str).fillna("")
