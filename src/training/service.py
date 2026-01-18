@@ -1,4 +1,3 @@
-import json
 import os
 import pickle
 from pathlib import Path
@@ -77,19 +76,6 @@ def normalize_lora_config(hp: dict) -> dict | None:
         "target_modules": list(target_modules),
         "bias": "none",
     }
-
-
-def save_lora_metadata(path: Path, config: dict, base_model: str) -> None:
-    payload = {
-        "enabled": True,
-        "r": config["r"],
-        "lora_alpha": config["lora_alpha"],
-        "lora_dropout": config["lora_dropout"],
-        "target_modules": config["target_modules"],
-        "bias": config.get("bias", "none"),
-        "base_model": base_model,
-    }
-    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
 
 
 def configure_lora_trainables(model: BertClassifier) -> None:
@@ -221,18 +207,32 @@ def run_training_loop(
     output_dir = get_model_output_dir() / task_id
     output_dir.mkdir(parents=True, exist_ok=True)
     # Artifacts naming convention:
-    # - model weights: <name>.pt
-    # - label mappings: <name>.pt.pkl
+    # - full model weights: <name>.pt (full fine-tune only)
+    # - LoRA adapter: <name>.lora (directory) + classifier head: <name>.head.pt
+    # - label mappings: <weights>.pkl
     model_name_en = request_payload["model_name_en"]
-    model_filename = model_name_en if model_name_en.endswith(".pt") else f"{model_name_en}.pt"
+    model_stem = model_name_en[:-3] if model_name_en.endswith(".pt") else model_name_en
+    model_filename = f"{model_stem}.pt"
     best_model_path = output_dir / model_filename
-    label_mapping_path = output_dir / f"{model_filename}.pkl"
+    lora_adapter_path = None
+    classifier_head_path = None
+    if lora_config is None:
+        label_mapping_path = output_dir / f"{model_filename}.pkl"
+    else:
+        lora_adapter_path = output_dir / f"{model_stem}.lora"
+        classifier_head_path = output_dir / f"{model_stem}.head.pt"
+        label_mapping_path = output_dir / f"{classifier_head_path.name}.pkl"
     save_label_mappings(label_mapping_path, label_to_id, id_to_label)
 
-    lora_config_path = None
-    if lora_config is not None:
-        lora_config_path = output_dir / f"{Path(model_filename).stem}.lora.json"
-        save_lora_metadata(lora_config_path, lora_config, request_payload["base_model"])
+    def save_model_artifacts() -> None:
+        if lora_config is None:
+            torch.save(model.state_dict(), best_model_path)
+            return
+        if lora_adapter_path is None or classifier_head_path is None:
+            raise RuntimeError("LoRA paths were not initialized")
+        lora_adapter_path.mkdir(parents=True, exist_ok=True)
+        model.bert.save_pretrained(lora_adapter_path)
+        torch.save(model.linear.state_dict(), classifier_head_path)
 
     model = BertClassifier(request_payload["base_model"], output_dim=len(label_to_id), lora_config=lora_config)
     device = select_device(task_id)
@@ -251,16 +251,23 @@ def run_training_loop(
     total_epochs = hp["epochs"]
     has_validation = dev_size > 0
 
+    def build_result(status: str) -> dict:
+        result = {
+            "status": status,
+            "label_mapping_path": str(label_mapping_path),
+            "lora_enabled": lora_config is not None,
+        }
+        if lora_config is None:
+            result["model_path"] = str(best_model_path)
+        else:
+            result["lora_adapter_path"] = str(lora_adapter_path)
+            result["classifier_head_path"] = str(classifier_head_path)
+        return result
+
     for epoch_index in range(total_epochs):
         if stop_requested():
             logger.info("Stop requested for task {}", task_id)
-            return {
-                "status": "stopped",
-                "model_path": str(best_model_path),
-                "label_mapping_path": str(label_mapping_path),
-                "lora_config_path": str(lora_config_path) if lora_config_path else None,
-                "lora_enabled": lora_config is not None,
-            }
+            return build_result("stopped")
 
         model.train()
         total_acc_train = 0.0
@@ -302,13 +309,7 @@ def run_training_loop(
             # Check for stop request after each batch
             if stop_requested():
                 logger.info("Stop requested for task {}", task_id)
-                return {
-                    "status": "stopped",
-                    "model_path": str(best_model_path),
-                    "label_mapping_path": str(label_mapping_path),
-                    "lora_config_path": str(lora_config_path) if lora_config_path else None,
-                    "lora_enabled": lora_config is not None,
-                }
+                return build_result("stopped")
 
         model.eval()
         total_acc_val = 0.0
@@ -360,20 +361,15 @@ def run_training_loop(
         if has_validation:
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
-                torch.save(model.state_dict(), best_model_path)
+                save_model_artifacts()
 
     if not has_validation:
-        torch.save(model.state_dict(), best_model_path)
+        save_model_artifacts()
 
-    return {
-        "status": "completed",
-        "model_path": str(best_model_path),
-        "label_mapping_path": str(label_mapping_path),
-        "lora_config_path": str(lora_config_path) if lora_config_path else None,
-        "lora_enabled": lora_config is not None,
-        "best_val_accuracy": best_val_accuracy,
-        "total_epochs": total_epochs,
-    }
+    result = build_result("completed")
+    result["best_val_accuracy"] = best_val_accuracy
+    result["total_epochs"] = total_epochs
+    return result
 
 
 __all__ = ["run_training_loop"]

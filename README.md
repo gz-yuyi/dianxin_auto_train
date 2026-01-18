@@ -64,7 +64,7 @@ To use LoRA via PEFT, add a `lora` block under `hyperparameters`:
 }
 ```
 
-Training emits a `<model_name_en>.lora.json` alongside the `.pt` weights when LoRA is enabled. For inference, pass `--lora-config` or keep the file in the same directory as the `.pt`.
+Training emits a `<model_name_en>.lora` adapter directory plus a `<model_name_en>.head.pt` classifier head when LoRA is enabled (full `.pt` weights are not saved). For inference, pass `--lora-adapter` or keep the adapter directory next to the `.head.pt`.
 
 ### Running with Docker
 

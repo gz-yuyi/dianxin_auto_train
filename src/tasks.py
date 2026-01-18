@@ -140,12 +140,13 @@ def start_training_task(self, task_id: str) -> dict:
 
     if status == "completed":
         artifacts = {
-            "model_path": result["model_path"],
             "label_mapping_path": result["label_mapping_path"],
         }
-        lora_config_path = result.get("lora_config_path")
-        if lora_config_path:
-            artifacts["lora_config_path"] = lora_config_path
+        if result.get("lora_enabled"):
+            artifacts["lora_adapter_path"] = result["lora_adapter_path"]
+            artifacts["classifier_head_path"] = result["classifier_head_path"]
+        else:
+            artifacts["model_path"] = result["model_path"]
         update_task_record(
             task_id,
             {

@@ -38,7 +38,7 @@
     "callback_url": "http://example.com/training/callback"
 }
 ```
-> `lora` 为可选配置，启用后会使用 LoRA 训练；任务完成后 `artifacts` 会额外返回 `lora_config_path`。
+> `lora` 为可选配置，启用后会使用 LoRA 训练；任务完成后 `artifacts` 会额外返回 `lora_adapter_path` 与 `classifier_head_path`。
 
 **响应**:
 ```json

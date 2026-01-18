@@ -138,12 +138,19 @@ def train(payload: str | None, payload_file: str | None, task_id: str | None, ca
         send_external_status_change(task_id, status)
     logger.info("Task {} completed with status {}", task_id, status)
     if status == "completed":
-        logger.info(
-            "Artifacts saved: model_path={}, label_mapping_path={}, lora_config_path={}",
-            result.get("model_path"),
-            result.get("label_mapping_path"),
-            result.get("lora_config_path"),
-        )
+        if result.get("lora_enabled"):
+            logger.info(
+                "Artifacts saved: lora_adapter_path={}, classifier_head_path={}, label_mapping_path={}",
+                result.get("lora_adapter_path"),
+                result.get("classifier_head_path"),
+                result.get("label_mapping_path"),
+            )
+        else:
+            logger.info(
+                "Artifacts saved: model_path={}, label_mapping_path={}",
+                result.get("model_path"),
+                result.get("label_mapping_path"),
+            )
 
 
 @cli.command("check-service")
