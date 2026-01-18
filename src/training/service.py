@@ -3,6 +3,7 @@ import math
 import os
 import pickle
 import time
+import warnings
 from pathlib import Path
 from typing import Callable
 
@@ -11,7 +12,8 @@ import pandas as pd
 import requests
 import torch
 from loguru import logger
-from sklearn.linear_model import SGDClassifier
+from sklearn.exceptions import ConvergenceWarning
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, log_loss
 from sklearn.model_selection import train_test_split
 from torch import nn
@@ -401,20 +403,16 @@ def run_setfit_training(
         }
 
     classes = np.arange(len(label_to_id))
-    classifier = SGDClassifier(
-        loss="log_loss",
-        learning_rate="optimal",
-        random_state=hp["random_seed"],
+    classifier = LogisticRegression(
         max_iter=1,
-        tol=None,
+        warm_start=True,
+        multi_class="multinomial",
+        solver="lbfgs",
     )
 
     best_val_accuracy = 0.0
     best_state: bytes | None = None
     total_epochs = hp["epochs"]
-    batch_size = hp["batch_size"]
-    rng = np.random.default_rng(hp["random_seed"])
-
     for epoch_index in range(total_epochs):
         if stop_requested():
             logger.info("Stop requested for task {}", task_id)
@@ -425,57 +423,37 @@ def run_setfit_training(
                 "embedding_config_path": str(embedding_config_path),
             }
 
-        indices = rng.permutation(len(train_vectors))
-        total_batches = math.ceil(len(indices) / batch_size)
-
-        for batch_idx in range(total_batches):
-            start = batch_idx * batch_size
-            end = start + batch_size
-            batch_indices = indices[start:end]
-            batch_vectors = train_vectors[batch_indices]
-            batch_labels = train_labels[batch_indices]
-
-            if epoch_index == 0 and batch_idx == 0:
-                classifier.partial_fit(batch_vectors, batch_labels, classes=classes)
-            else:
-                classifier.partial_fit(batch_vectors, batch_labels)
-
-            batch_predictions = classifier.predict(batch_vectors)
-            batch_accuracy = float((batch_predictions == batch_labels).mean()) if len(batch_labels) else 0.0
-            if len(batch_labels):
-                batch_probs = classifier.predict_proba(batch_vectors)
-                batch_loss = float(log_loss(batch_labels, batch_probs, labels=classes))
-            else:
-                batch_loss = 0.0
-
-            batch_progress = float((batch_idx + 1) * 100.0 / total_batches) if total_batches else 100.0
-            batch_metrics = {
-                "epoch": epoch_index + 1,
-                "total_epochs": total_epochs,
-                "batch": batch_idx + 1,
-                "total_batches": total_batches,
-                "batch_progress_percentage": batch_progress,
-                "train_accuracy": batch_accuracy,
-                "train_loss": batch_loss,
-                "val_accuracy": None,
-                "val_loss": None,
-                "callback_url": callback_url,
-            }
-            batch_progress_handler(epoch_index + 1, batch_idx + 1, batch_metrics)
-
-            if stop_requested():
-                logger.info("Stop requested for task {}", task_id)
-                return {
-                    "status": "stopped",
-                    "model_path": str(model_path),
-                    "label_mapping_path": str(label_mapping_path),
-                    "embedding_config_path": str(embedding_config_path),
-                }
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=ConvergenceWarning)
+            classifier.fit(train_vectors, train_labels)
 
         train_predictions = classifier.predict(train_vectors)
         train_accuracy = float(accuracy_score(train_labels, train_predictions))
         train_probs = classifier.predict_proba(train_vectors)
         train_loss = float(log_loss(train_labels, train_probs, labels=classes))
+
+        batch_metrics = {
+            "epoch": epoch_index + 1,
+            "total_epochs": total_epochs,
+            "batch": 1,
+            "total_batches": 1,
+            "batch_progress_percentage": 100.0,
+            "train_accuracy": train_accuracy,
+            "train_loss": train_loss,
+            "val_accuracy": None,
+            "val_loss": None,
+            "callback_url": callback_url,
+        }
+        batch_progress_handler(epoch_index + 1, 1, batch_metrics)
+
+        if stop_requested():
+            logger.info("Stop requested for task {}", task_id)
+            return {
+                "status": "stopped",
+                "model_path": str(model_path),
+                "label_mapping_path": str(label_mapping_path),
+                "embedding_config_path": str(embedding_config_path),
+            }
 
         val_predictions = classifier.predict(dev_vectors)
         val_accuracy = float(accuracy_score(dev_labels, val_predictions))
