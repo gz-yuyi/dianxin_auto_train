@@ -19,6 +19,8 @@ class HyperParameters(BaseModel):
     epochs: int = Field(5, ge=1, description="Number of training epochs")
     batch_size: int = Field(64, ge=1, description="Batch size for training")
     max_sequence_length: int = Field(512, ge=8, description="Maximum token length")
+    precision: str = Field("fp32", description="Training precision: fp32, fp16, or bf16")
+    gradient_accumulation_steps: int = Field(1, ge=1, description="Number of steps to accumulate gradients")
     random_seed: int = Field(1999, description="Random seed for reproducibility")
     train_val_split: float = Field(0.2, ge=0.0, lt=1.0, description="Holdout ratio (0 means no validation split)")
     text_column: str = Field(..., description="Name of text column in dataset")

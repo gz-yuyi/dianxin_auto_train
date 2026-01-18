@@ -1,3 +1,4 @@
+import contextlib
 import os
 import pickle
 from pathlib import Path
@@ -46,10 +47,17 @@ class TextClassifier(nn.Module):
         output_dim: int,
         lora_config: dict | None = None,
         base_model_instance: nn.Module | None = None,
+        torch_dtype: torch.dtype | None = None,
     ):
         super().__init__()
         self.use_lora = lora_config is not None
-        self.bert = base_model_instance or AutoModel.from_pretrained(base_model)
+        if base_model_instance is not None:
+            self.bert = base_model_instance
+        else:
+            if torch_dtype is None:
+                self.bert = AutoModel.from_pretrained(base_model)
+            else:
+                self.bert = AutoModel.from_pretrained(base_model, torch_dtype=torch_dtype)
         if lora_config is not None:
             self.bert = get_peft_model(self.bert, LoraConfig(**lora_config))
         self.dropout = nn.Dropout(0.5)
@@ -235,6 +243,23 @@ def run_training_loop(
         label_mapping_path = output_dir / f"{classifier_head_path.name}.pkl"
     save_label_mappings(label_mapping_path, label_to_id, id_to_label)
 
+    device = select_device(task_id)
+    logger.info("Task {} using device {}", task_id, device)
+
+    precision = str(hp.get("precision", "fp32")).lower()
+    if precision not in {"fp32", "fp16", "bf16"}:
+        raise ValueError(f"Unsupported precision '{precision}', expected fp32, fp16, or bf16.")
+    if device.type != "cuda" and precision != "fp32":
+        logger.warning("Precision {} requested but CUDA unavailable; falling back to fp32.", precision)
+        precision = "fp32"
+
+    if precision == "fp16":
+        torch_dtype = torch.float16
+    elif precision == "bf16":
+        torch_dtype = torch.bfloat16
+    else:
+        torch_dtype = None
+
     def save_model_artifacts() -> None:
         if lora_config is None:
             torch.save(model.state_dict(), best_model_path)
@@ -245,9 +270,12 @@ def run_training_loop(
         model.bert.save_pretrained(lora_adapter_path)
         torch.save(model.linear.state_dict(), classifier_head_path)
 
-    model = TextClassifier(request_payload["base_model"], output_dim=len(label_to_id), lora_config=lora_config)
-    device = select_device(task_id)
-    logger.info("Task {} using device {}", task_id, device)
+    model = TextClassifier(
+        request_payload["base_model"],
+        output_dim=len(label_to_id),
+        lora_config=lora_config,
+        torch_dtype=torch_dtype,
+    )
     model = model.to(device)
     if lora_config is not None:
         configure_lora_trainables(model)
@@ -256,6 +284,19 @@ def run_training_loop(
     criterion = nn.CrossEntropyLoss().to(device)
     trainable_params = [param for param in model.parameters() if param.requires_grad]
     optimizer = Adam(trainable_params, lr=hp["learning_rate"])
+
+    grad_accum_steps = int(hp.get("gradient_accumulation_steps", 1))
+    if grad_accum_steps < 1:
+        raise ValueError("gradient_accumulation_steps must be >= 1.")
+
+    use_amp = device.type == "cuda" and precision in {"fp16", "bf16"}
+    amp_dtype = torch_dtype if use_amp else None
+    scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda" and precision == "fp16")
+
+    def autocast_context():
+        if not use_amp:
+            return contextlib.nullcontext()
+        return torch.cuda.amp.autocast(dtype=amp_dtype)
 
     best_val_accuracy = 0.0
 
@@ -285,20 +326,32 @@ def run_training_loop(
         total_loss_train = 0.0
         sample_count_train = 0
         total_batches = len(train_loader)
+        optimizer.zero_grad(set_to_none=True)
 
         for batch_idx, (inputs, labels) in enumerate(train_loader):
             input_ids = inputs["input_ids"].squeeze(1).to(device)
             attention_mask = inputs["attention_mask"].squeeze(1).to(device)
             labels = labels.to(device)
-            outputs = model(input_ids, attention_mask)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
+            with autocast_context():
+                outputs = model(input_ids, attention_mask)
+                loss = criterion(outputs, labels)
+            loss_value = loss.item()
+            scaled_loss = loss / grad_accum_steps
+            if scaler.is_enabled():
+                scaler.scale(scaled_loss).backward()
+            else:
+                scaled_loss.backward()
+            if (batch_idx + 1) % grad_accum_steps == 0 or (batch_idx + 1) == total_batches:
+                if scaler.is_enabled():
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
 
             predictions = outputs.argmax(dim=1)
             total_acc_train += (predictions == labels).sum().item()
-            total_loss_train += loss.item() * labels.size(0)
+            total_loss_train += loss_value * labels.size(0)
             sample_count_train += labels.size(0)
             
             # Calculate batch progress within current epoch
@@ -333,8 +386,9 @@ def run_training_loop(
                 input_ids = inputs["input_ids"].squeeze(1).to(device)
                 attention_mask = inputs["attention_mask"].squeeze(1).to(device)
                 labels = labels.to(device)
-                outputs = model(input_ids, attention_mask)
-                loss = criterion(outputs, labels)
+                with autocast_context():
+                    outputs = model(input_ids, attention_mask)
+                    loss = criterion(outputs, labels)
                 predictions = outputs.argmax(dim=1)
 
                 total_acc_val += (predictions == labels).sum().item()
