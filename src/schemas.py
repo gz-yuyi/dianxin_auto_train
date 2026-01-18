@@ -3,6 +3,17 @@ from typing import Any
 from pydantic import BaseModel, Field, HttpUrl
 
 
+class LoraConfig(BaseModel):
+    enabled: bool = Field(False, description="Enable LoRA fine-tuning")
+    r: int = Field(8, ge=1, description="LoRA rank")
+    lora_alpha: float = Field(16, gt=0, description="LoRA alpha")
+    lora_dropout: float = Field(0.1, ge=0.0, lt=1.0, description="LoRA dropout")
+    target_modules: list[str] = Field(
+        default_factory=lambda: ["query", "value"],
+        description="Target module names for LoRA injection",
+    )
+
+
 class HyperParameters(BaseModel):
     learning_rate: float = Field(3e-5, description="Learning rate for optimizer")
     epochs: int = Field(5, ge=1, description="Number of training epochs")
@@ -13,6 +24,7 @@ class HyperParameters(BaseModel):
     text_column: str = Field(..., description="Name of text column in dataset")
     label_column: str = Field(..., description="Name of label column in dataset")
     sheet_name: str | None = Field(None, description="Excel sheet name if applicable")
+    lora: LoraConfig | None = Field(None, description="Optional LoRA configuration")
 
 
 class TrainingTaskCreateRequest(BaseModel):
@@ -87,6 +99,7 @@ class DeleteTaskResponse(BaseModel):
 __all__ = [
     "DeleteTaskResponse",
     "HyperParameters",
+    "LoraConfig",
     "StopTaskResponse",
     "TaskProgress",
     "TrainingTaskCreateRequest",

@@ -47,6 +47,25 @@ To enable callbacks, add `--callback`:
 uv run python main.py train --payload-file payload.json --callback
 ```
 
+### LoRA (optional)
+To use LoRA via PEFT, add a `lora` block under `hyperparameters`:
+
+```json
+{
+  "hyperparameters": {
+    "lora": {
+      "enabled": true,
+      "r": 8,
+      "lora_alpha": 16,
+      "lora_dropout": 0.1,
+      "target_modules": ["query", "value"]
+    }
+  }
+}
+```
+
+Training emits a `<model_name_en>.lora.json` alongside the `.pt` weights when LoRA is enabled. For inference, pass `--lora-config` or keep the file in the same directory as the `.pt`.
+
 ### Running with Docker
 
 You can run the full stack (FastAPI, Celery worker, Redis) using the included `Dockerfile` and `docker-compose.yml`.

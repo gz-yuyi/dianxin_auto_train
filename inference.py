@@ -1,4 +1,5 @@
 import datetime
+import json
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -7,15 +8,19 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from torch import nn
+from peft import LoraConfig, get_peft_model
 from transformers import BertModel, BertTokenizer
 
 
 class BertClassifier(nn.Module):
     """Same architecture as the legacy training script."""
 
-    def __init__(self, base_model: str, out_features: int):
+    def __init__(self, base_model: str, out_features: int, lora_config: dict | None = None):
         super().__init__()
+        self.use_lora = lora_config is not None
         self.bert = BertModel.from_pretrained(base_model)
+        if lora_config is not None:
+            self.bert = get_peft_model(self.bert, LoraConfig(**lora_config))
         self.dropout = nn.Dropout(0.5)
         self.linear = nn.Linear(768, out_features)
         self.relu = nn.ReLU()
@@ -45,10 +50,39 @@ def load_label_mapping(path: Path) -> tuple[dict[str, int], dict[int, str]]:
     return label2id, id2label
 
 
+def resolve_lora_config_path(model_path: Path, lora_config_path: str | None) -> Path | None:
+    if lora_config_path:
+        return Path(lora_config_path)
+    candidate = model_path.with_name(f"{model_path.stem}.lora.json")
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def load_lora_config(path: Path) -> dict | None:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not payload.get("enabled", False):
+        return None
+    target_modules = payload.get("target_modules") or ["query", "value"]
+    return {
+        "r": int(payload.get("r", 8)),
+        "lora_alpha": float(payload.get("lora_alpha", 16)),
+        "lora_dropout": float(payload.get("lora_dropout", 0.1)),
+        "target_modules": list(target_modules),
+        "bias": payload.get("bias", "none"),
+    }
+
+
 def load_model(
-    model_path: Path, base_model: str, num_labels: int, device: torch.device
+    model_path: Path,
+    base_model: str,
+    num_labels: int,
+    device: torch.device,
+    lora_config_path: str | None = None,
 ) -> BertClassifier:
-    model = BertClassifier(base_model, out_features=num_labels)
+    resolved_lora_path = resolve_lora_config_path(model_path, lora_config_path)
+    lora_config = load_lora_config(resolved_lora_path) if resolved_lora_path else None
+    model = BertClassifier(base_model, out_features=num_labels, lora_config=lora_config)
     state_dict = torch.load(model_path, map_location=device)
     model.load_state_dict(state_dict)
     model.to(device)
@@ -147,6 +181,12 @@ def cli() -> None:
     help="预训练模型名称或本地路径",
 )
 @click.option(
+    "--lora-config",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="LoRA 配置 JSON（可选，不填则自动查找同目录 *.lora.json）",
+)
+@click.option(
     "--max-length", default=512, show_default=True, type=int, help="分词最大长度"
 )
 @click.option("--top-n", default=3, show_default=True, type=int, help="返回前 N 个标签")
@@ -169,6 +209,7 @@ def multi_class(
     model_path: str,
     label_mapping: str,
     base_model: str,
+    lora_config: str | None,
     max_length: int,
     top_n: int,
     device: str,
@@ -179,7 +220,11 @@ def multi_class(
     device_resolved = pick_device(device)
     label2id, id2label = load_label_mapping(Path(label_mapping))
     model = load_model(
-        Path(model_path), base_model, num_labels=len(label2id), device=device_resolved
+        Path(model_path),
+        base_model,
+        num_labels=len(label2id),
+        device=device_resolved,
+        lora_config_path=lora_config,
     )
     tokenizer = BertTokenizer.from_pretrained(base_model)
 
@@ -241,6 +286,12 @@ def multi_class(
     help="预训练模型名称或本地路径",
 )
 @click.option(
+    "--lora-config",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="LoRA 配置 JSON（可选，不填则自动查找同目录 *.lora.json）",
+)
+@click.option(
     "--max-length", default=512, show_default=True, type=int, help="分词最大长度"
 )
 @click.option(
@@ -273,6 +324,7 @@ def single_judge(
     model_path: str,
     label_mapping: str,
     base_model: str,
+    lora_config: str | None,
     max_length: int,
     top_k: int,
     threshold: float,
@@ -284,7 +336,11 @@ def single_judge(
     device_resolved = pick_device(device)
     label2id, id2label = load_label_mapping(Path(label_mapping))
     model = load_model(
-        Path(model_path), base_model, num_labels=len(label2id), device=device_resolved
+        Path(model_path),
+        base_model,
+        num_labels=len(label2id),
+        device=device_resolved,
+        lora_config_path=lora_config,
     )
     tokenizer = BertTokenizer.from_pretrained(base_model)
 
@@ -354,6 +410,12 @@ def single_judge(
     help="预训练模型名称或本地路径",
 )
 @click.option(
+    "--lora-config",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="LoRA 配置 JSON（可选，不填则自动查找同目录 *.lora.json）",
+)
+@click.option(
     "--max-length", default=512, show_default=True, type=int, help="分词最大长度"
 )
 @click.option(
@@ -386,6 +448,7 @@ def multi_judge(
     model_path: str,
     label_mapping: str,
     base_model: str,
+    lora_config: str | None,
     max_length: int,
     top_k: int,
     threshold: float,
@@ -397,7 +460,11 @@ def multi_judge(
     device_resolved = pick_device(device)
     label2id, id2label = load_label_mapping(Path(label_mapping))
     model = load_model(
-        Path(model_path), base_model, num_labels=len(label2id), device=device_resolved
+        Path(model_path),
+        base_model,
+        num_labels=len(label2id),
+        device=device_resolved,
+        lora_config_path=lora_config,
     )
     tokenizer = BertTokenizer.from_pretrained(base_model)
 

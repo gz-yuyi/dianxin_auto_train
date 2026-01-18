@@ -1,11 +1,13 @@
-import pickle
+import json
 import os
+import pickle
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
 import pandas as pd
 import torch
+from peft import LoraConfig, get_peft_model
 from loguru import logger
 from sklearn.metrics import f1_score
 from sklearn.model_selection import train_test_split
@@ -39,9 +41,12 @@ class TextClassificationDataset(Dataset):
 
 
 class BertClassifier(nn.Module):
-    def __init__(self, base_model: str, output_dim: int):
+    def __init__(self, base_model: str, output_dim: int, lora_config: dict | None = None):
         super().__init__()
+        self.use_lora = lora_config is not None
         self.bert = BertModel.from_pretrained(base_model)
+        if lora_config is not None:
+            self.bert = get_peft_model(self.bert, LoraConfig(**lora_config))
         self.dropout = nn.Dropout(0.5)
         self.linear = nn.Linear(768, output_dim)
         self.relu = nn.ReLU()
@@ -58,6 +63,46 @@ def resolve_dataset_path(filename: str) -> Path:
     if path.is_absolute():
         return path
     return get_data_root() / path
+
+
+def normalize_lora_config(hp: dict) -> dict | None:
+    raw = hp.get("lora")
+    if not raw or not raw.get("enabled", False):
+        return None
+    target_modules = raw.get("target_modules") or ["query", "value"]
+    return {
+        "r": int(raw.get("r", 8)),
+        "lora_alpha": float(raw.get("lora_alpha", 16)),
+        "lora_dropout": float(raw.get("lora_dropout", 0.1)),
+        "target_modules": list(target_modules),
+        "bias": "none",
+    }
+
+
+def save_lora_metadata(path: Path, config: dict, base_model: str) -> None:
+    payload = {
+        "enabled": True,
+        "r": config["r"],
+        "lora_alpha": config["lora_alpha"],
+        "lora_dropout": config["lora_dropout"],
+        "target_modules": config["target_modules"],
+        "bias": config.get("bias", "none"),
+        "base_model": base_model,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+
+
+def configure_lora_trainables(model: BertClassifier) -> None:
+    for name, param in model.bert.named_parameters():
+        param.requires_grad = "lora_" in name
+    for param in model.linear.parameters():
+        param.requires_grad = True
+
+
+def count_trainable_parameters(model: nn.Module) -> tuple[int, int]:
+    total = sum(param.numel() for param in model.parameters())
+    trainable = sum(param.numel() for param in model.parameters() if param.requires_grad)
+    return trainable, total
 
 
 def setup_seed(seed: int) -> None:
@@ -152,6 +197,7 @@ def run_training_loop(
 ) -> dict:
     hp = request_payload["hyperparameters"]
     callback_url = request_payload.get("callback_url")
+    lora_config = normalize_lora_config(hp)
 
     logger.info("Starting training task {}", task_id)
 
@@ -183,12 +229,22 @@ def run_training_loop(
     label_mapping_path = output_dir / f"{model_filename}.pkl"
     save_label_mappings(label_mapping_path, label_to_id, id_to_label)
 
-    model = BertClassifier(request_payload["base_model"], output_dim=len(label_to_id))
+    lora_config_path = None
+    if lora_config is not None:
+        lora_config_path = output_dir / f"{Path(model_filename).stem}.lora.json"
+        save_lora_metadata(lora_config_path, lora_config, request_payload["base_model"])
+
+    model = BertClassifier(request_payload["base_model"], output_dim=len(label_to_id), lora_config=lora_config)
     device = select_device(task_id)
     logger.info("Task {} using device {}", task_id, device)
     model = model.to(device)
+    if lora_config is not None:
+        configure_lora_trainables(model)
+        trainable, total = count_trainable_parameters(model)
+        logger.info("Task {} LoRA enabled: trainable params {}/{}", task_id, trainable, total)
     criterion = nn.CrossEntropyLoss().to(device)
-    optimizer = Adam(model.parameters(), lr=hp["learning_rate"])
+    trainable_params = [param for param in model.parameters() if param.requires_grad]
+    optimizer = Adam(trainable_params, lr=hp["learning_rate"])
 
     best_val_accuracy = 0.0
 
@@ -202,6 +258,8 @@ def run_training_loop(
                 "status": "stopped",
                 "model_path": str(best_model_path),
                 "label_mapping_path": str(label_mapping_path),
+                "lora_config_path": str(lora_config_path) if lora_config_path else None,
+                "lora_enabled": lora_config is not None,
             }
 
         model.train()
@@ -248,6 +306,8 @@ def run_training_loop(
                     "status": "stopped",
                     "model_path": str(best_model_path),
                     "label_mapping_path": str(label_mapping_path),
+                    "lora_config_path": str(lora_config_path) if lora_config_path else None,
+                    "lora_enabled": lora_config is not None,
                 }
 
         model.eval()
@@ -309,6 +369,8 @@ def run_training_loop(
         "status": "completed",
         "model_path": str(best_model_path),
         "label_mapping_path": str(label_mapping_path),
+        "lora_config_path": str(lora_config_path) if lora_config_path else None,
+        "lora_enabled": lora_config is not None,
         "best_val_accuracy": best_val_accuracy,
         "total_epochs": total_epochs,
     }

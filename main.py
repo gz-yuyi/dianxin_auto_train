@@ -139,9 +139,10 @@ def train(payload: str | None, payload_file: str | None, task_id: str | None, ca
     logger.info("Task {} completed with status {}", task_id, status)
     if status == "completed":
         logger.info(
-            "Artifacts saved: model_path={}, label_mapping_path={}",
+            "Artifacts saved: model_path={}, label_mapping_path={}, lora_config_path={}",
             result.get("model_path"),
             result.get("label_mapping_path"),
+            result.get("lora_config_path"),
         )
 
 

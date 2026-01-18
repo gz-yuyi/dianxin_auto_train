@@ -143,6 +143,9 @@ def start_training_task(self, task_id: str) -> dict:
             "model_path": result["model_path"],
             "label_mapping_path": result["label_mapping_path"],
         }
+        lora_config_path = result.get("lora_config_path")
+        if lora_config_path:
+            artifacts["lora_config_path"] = lora_config_path
         update_task_record(
             task_id,
             {
