@@ -17,6 +17,7 @@
     "model_name_en": "environmental_pollution_classifier",
     "training_data_file": "环境保护_空气污染--样例1000.xlsx",
     "base_model": "bert-base-chinese",
+    "training_mode": "bert",
     "hyperparameters": {
         "learning_rate": 3e-5,
         "epochs": 10,
@@ -31,6 +32,37 @@
     "callback_url": "http://example.com/training/callback"
 }
 ```
+
+**SetFit(Embedding + Sklearn) 模式请求示例**:
+```json
+{
+    "model_name_cn": "环境保护污染分类模型",
+    "model_name_en": "environmental_pollution_setfit",
+    "training_data_file": "环境保护_空气污染--样例1000.xlsx",
+    "training_mode": "setfit",
+    "embedding": {
+        "base_url": "http://127.0.0.1:8001/v1",
+        "model": "text-embedding-3-small",
+        "api_key": null,
+        "batch_size": 64,
+        "timeout": 60,
+        "max_retries": 2
+    },
+    "hyperparameters": {
+        "learning_rate": 3e-5,
+        "epochs": 5,
+        "batch_size": 64,
+        "max_sequence_length": 512,
+        "random_seed": 42,
+        "train_val_split": 0.2,
+        "text_column": "内容合并",
+        "label_column": "标签列",
+        "sheet_name": null
+    },
+    "callback_url": "http://example.com/training/callback"
+}
+```
+说明：`training_mode` 为 `setfit` 时，训练将使用 embedding 服务生成向量，`base_model` 参数会被忽略。
 
 **响应**:
 ```json

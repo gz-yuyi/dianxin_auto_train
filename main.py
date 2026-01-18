@@ -143,6 +143,8 @@ def train(payload: str | None, payload_file: str | None, task_id: str | None, ca
             result.get("model_path"),
             result.get("label_mapping_path"),
         )
+        if result.get("embedding_config_path"):
+            logger.info("Embedding config saved: {}", result.get("embedding_config_path"))
 
 
 @cli.command("check-service")

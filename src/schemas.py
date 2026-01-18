@@ -1,6 +1,6 @@
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl
 
 
 class HyperParameters(BaseModel):
@@ -15,11 +15,25 @@ class HyperParameters(BaseModel):
     sheet_name: str | None = Field(None, description="Excel sheet name if applicable")
 
 
+class EmbeddingConfig(BaseModel):
+    base_url: AnyHttpUrl = Field(..., description="OpenAI-compatible embedding base URL")
+    model: str = Field(..., description="Embedding model name")
+    api_key: str | None = Field(None, description="Optional API key for embedding service")
+    batch_size: int = Field(64, ge=1, description="Batch size for embedding requests")
+    timeout: float = Field(60.0, gt=0.0, description="Embedding request timeout (seconds)")
+    max_retries: int = Field(2, ge=0, description="Embedding request retry count")
+    extra_headers: dict[str, str] | None = Field(None, description="Extra headers for embedding requests")
+
+
 class TrainingTaskCreateRequest(BaseModel):
     model_name_cn: str
     model_name_en: str
     training_data_file: str
     base_model: str = "bert-base-chinese"
+    training_mode: Literal["bert", "setfit"] = Field("bert", description="Training mode")
+    embedding: EmbeddingConfig | None = Field(
+        None, description="Embedding configuration for setfit training"
+    )
     hyperparameters: HyperParameters
     callback_url: HttpUrl | None = Field(None, description="Optional callback endpoint for progress notifications")
 
@@ -86,6 +100,7 @@ class DeleteTaskResponse(BaseModel):
 
 __all__ = [
     "DeleteTaskResponse",
+    "EmbeddingConfig",
     "HyperParameters",
     "StopTaskResponse",
     "TaskProgress",

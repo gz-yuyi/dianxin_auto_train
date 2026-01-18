@@ -1,13 +1,18 @@
-import pickle
+import json
+import math
 import os
+import pickle
+import time
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
 import pandas as pd
+import requests
 import torch
 from loguru import logger
-from sklearn.metrics import f1_score
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import accuracy_score, f1_score, log_loss
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.optim import Adam
@@ -58,6 +63,97 @@ def resolve_dataset_path(filename: str) -> Path:
     if path.is_absolute():
         return path
     return get_data_root() / path
+
+
+def build_embeddings_url(base_url: str) -> str:
+    trimmed = base_url.rstrip("/")
+    if trimmed.endswith("/embeddings"):
+        return trimmed
+    if trimmed.endswith("/v1"):
+        return f"{trimmed}/embeddings"
+    return f"{trimmed}/v1/embeddings"
+
+
+def sanitize_embedding_config(embedding_config: dict) -> dict[str, object]:
+    return {
+        "base_url": str(embedding_config.get("base_url")),
+        "model": embedding_config.get("model"),
+        "batch_size": embedding_config.get("batch_size"),
+        "timeout": embedding_config.get("timeout"),
+    }
+
+
+def save_embedding_metadata(path: Path, embedding_config: dict) -> None:
+    safe_config = sanitize_embedding_config(embedding_config)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(safe_config, handle, ensure_ascii=True, indent=2)
+
+
+def request_embedding_batch(
+    session: requests.Session,
+    embedding_config: dict,
+    inputs: list[str],
+) -> list[list[float]]:
+    base_url = str(embedding_config["base_url"])
+    url = build_embeddings_url(base_url)
+    headers = {"Content-Type": "application/json"}
+    api_key = embedding_config.get("api_key")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    extra_headers = embedding_config.get("extra_headers") or {}
+    headers.update(extra_headers)
+    payload = {"model": embedding_config["model"], "input": inputs}
+    timeout = embedding_config.get("timeout", 60.0)
+    max_retries = embedding_config.get("max_retries", 2)
+    last_exc: Exception | None = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            response = session.post(url, json=payload, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            data = response.json()
+            if "data" not in data:
+                raise ValueError(f"Embedding response missing 'data': {data}")
+            items = data["data"]
+            if not isinstance(items, list):
+                raise ValueError("Embedding response 'data' is not a list")
+            if items and "index" in items[0]:
+                items = sorted(items, key=lambda item: item.get("index", 0))
+            embeddings = [item["embedding"] for item in items]
+            return embeddings
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= max_retries:
+                raise
+            time.sleep(min(2 ** attempt, 5))
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("Embedding request failed without an exception")
+
+
+def collect_embeddings(
+    texts: list[str],
+    embedding_config: dict,
+    session: requests.Session,
+    stop_requested: Callable[[], bool],
+) -> np.ndarray | None:
+    if not texts:
+        return np.empty((0, 0), dtype=np.float32)
+    batch_size = int(embedding_config.get("batch_size") or 64)
+    total_batches = math.ceil(len(texts) / batch_size)
+    embeddings: list[list[float]] = []
+
+    for batch_idx in range(total_batches):
+        if stop_requested():
+            return None
+        batch_texts = texts[batch_idx * batch_size : (batch_idx + 1) * batch_size]
+        batch_embeddings = request_embedding_batch(session, embedding_config, batch_texts)
+        if len(batch_embeddings) != len(batch_texts):
+            raise ValueError("Embedding response size mismatch")
+        embeddings.extend(batch_embeddings)
+
+    return np.asarray(embeddings, dtype=np.float32)
 
 
 def setup_seed(seed: int) -> None:
@@ -137,9 +233,225 @@ def build_dataloaders(
     return train_loader, dev_loader, len(dev_dataset)
 
 
+def split_dataframe(dataframe: pd.DataFrame, hp: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    train_df, holdout_df = train_test_split(
+        dataframe,
+        test_size=hp["train_val_split"],
+        stratify=None,
+        random_state=42,
+    )
+    dev_df, _ = train_test_split(
+        holdout_df,
+        test_size=0.5,
+        stratify=None,
+        random_state=42,
+    )
+    return train_df, dev_df
+
+
 def save_label_mappings(mapping_path: Path, label_to_id: dict[str, int], id_to_label: dict[int, str]) -> None:
     with mapping_path.open("wb") as handle:
         pickle.dump((label_to_id, id_to_label), handle)
+
+
+def resolve_setfit_artifacts(output_dir: Path, model_name_en: str) -> tuple[Path, Path, Path]:
+    base_name = model_name_en
+    if base_name.endswith(".pkl"):
+        base_name = base_name[:-4]
+    model_path = output_dir / f"{base_name}.pkl"
+    label_mapping_path = output_dir / f"{base_name}.labels.pkl"
+    embedding_config_path = output_dir / f"{base_name}.embedding.json"
+    return model_path, label_mapping_path, embedding_config_path
+
+
+def run_setfit_training(
+    *,
+    task_id: str,
+    request_payload: dict,
+    progress_handler: Callable[[int, dict[str, float]], None],
+    batch_progress_handler: Callable[[int, int, dict[str, float]], None],
+    stop_requested: Callable[[], bool],
+) -> dict:
+    hp = request_payload["hyperparameters"]
+    callback_url = request_payload.get("callback_url")
+    embedding_config = request_payload.get("embedding")
+    if not embedding_config:
+        raise ValueError("Embedding config is required for setfit training")
+    if "base_url" not in embedding_config or "model" not in embedding_config:
+        raise ValueError("Embedding config must include base_url and model")
+
+    logger.info("Starting setfit training task {}", task_id)
+
+    dataset_path = resolve_dataset_path(request_payload["training_data_file"])
+    dataframe, label_to_id, id_to_label = prepare_dataframe(
+        dataset_path=dataset_path,
+        sheet_name=hp.get("sheet_name"),
+        text_column=hp["text_column"],
+        label_column=hp["label_column"],
+    )
+    setup_seed(hp["random_seed"])
+    train_df, dev_df = split_dataframe(dataframe, hp)
+
+    output_dir = get_model_output_dir() / task_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    model_path, label_mapping_path, embedding_config_path = resolve_setfit_artifacts(
+        output_dir, request_payload["model_name_en"]
+    )
+    save_label_mappings(label_mapping_path, label_to_id, id_to_label)
+    save_embedding_metadata(embedding_config_path, embedding_config)
+
+    train_texts = train_df[hp["text_column"]].tolist()
+    dev_texts = dev_df[hp["text_column"]].tolist()
+    train_labels = train_df[hp["label_column"]].to_numpy()
+    dev_labels = dev_df[hp["label_column"]].to_numpy()
+
+    if len(train_labels) == 0 or len(dev_labels) == 0:
+        raise ValueError("Training and validation splits must be non-empty")
+
+    session = requests.Session()
+    logger.info("Fetching embeddings for {} training samples", len(train_texts))
+    train_vectors = collect_embeddings(train_texts, embedding_config, session, stop_requested)
+    if train_vectors is None:
+        logger.info("Stop requested for task {} during embedding fetch", task_id)
+        return {
+            "status": "stopped",
+            "model_path": str(model_path),
+            "label_mapping_path": str(label_mapping_path),
+            "embedding_config_path": str(embedding_config_path),
+        }
+    logger.info("Fetching embeddings for {} validation samples", len(dev_texts))
+    dev_vectors = collect_embeddings(dev_texts, embedding_config, session, stop_requested)
+    if dev_vectors is None:
+        logger.info("Stop requested for task {} during embedding fetch", task_id)
+        return {
+            "status": "stopped",
+            "model_path": str(model_path),
+            "label_mapping_path": str(label_mapping_path),
+            "embedding_config_path": str(embedding_config_path),
+        }
+
+    classes = np.arange(len(label_to_id))
+    classifier = SGDClassifier(
+        loss="log_loss",
+        learning_rate="optimal",
+        random_state=hp["random_seed"],
+        max_iter=1,
+        tol=None,
+    )
+
+    best_val_accuracy = 0.0
+    best_state: bytes | None = None
+    total_epochs = hp["epochs"]
+    batch_size = hp["batch_size"]
+    rng = np.random.default_rng(hp["random_seed"])
+
+    for epoch_index in range(total_epochs):
+        if stop_requested():
+            logger.info("Stop requested for task {}", task_id)
+            return {
+                "status": "stopped",
+                "model_path": str(model_path),
+                "label_mapping_path": str(label_mapping_path),
+                "embedding_config_path": str(embedding_config_path),
+            }
+
+        indices = rng.permutation(len(train_vectors))
+        total_batches = math.ceil(len(indices) / batch_size)
+
+        for batch_idx in range(total_batches):
+            start = batch_idx * batch_size
+            end = start + batch_size
+            batch_indices = indices[start:end]
+            batch_vectors = train_vectors[batch_indices]
+            batch_labels = train_labels[batch_indices]
+
+            if epoch_index == 0 and batch_idx == 0:
+                classifier.partial_fit(batch_vectors, batch_labels, classes=classes)
+            else:
+                classifier.partial_fit(batch_vectors, batch_labels)
+
+            batch_predictions = classifier.predict(batch_vectors)
+            batch_accuracy = float((batch_predictions == batch_labels).mean()) if len(batch_labels) else 0.0
+            if len(batch_labels):
+                batch_probs = classifier.predict_proba(batch_vectors)
+                batch_loss = float(log_loss(batch_labels, batch_probs, labels=classes))
+            else:
+                batch_loss = 0.0
+
+            batch_progress = float((batch_idx + 1) * 100.0 / total_batches) if total_batches else 100.0
+            batch_metrics = {
+                "epoch": epoch_index + 1,
+                "total_epochs": total_epochs,
+                "batch": batch_idx + 1,
+                "total_batches": total_batches,
+                "batch_progress_percentage": batch_progress,
+                "train_accuracy": batch_accuracy,
+                "train_loss": batch_loss,
+                "val_accuracy": None,
+                "val_loss": None,
+                "callback_url": callback_url,
+            }
+            batch_progress_handler(epoch_index + 1, batch_idx + 1, batch_metrics)
+
+            if stop_requested():
+                logger.info("Stop requested for task {}", task_id)
+                return {
+                    "status": "stopped",
+                    "model_path": str(model_path),
+                    "label_mapping_path": str(label_mapping_path),
+                    "embedding_config_path": str(embedding_config_path),
+                }
+
+        train_predictions = classifier.predict(train_vectors)
+        train_accuracy = float(accuracy_score(train_labels, train_predictions))
+        train_probs = classifier.predict_proba(train_vectors)
+        train_loss = float(log_loss(train_labels, train_probs, labels=classes))
+
+        val_predictions = classifier.predict(dev_vectors)
+        val_accuracy = float(accuracy_score(dev_labels, val_predictions))
+        val_probs = classifier.predict_proba(dev_vectors)
+        val_loss = float(log_loss(dev_labels, val_probs, labels=classes))
+        f1 = f1_score(dev_labels, val_predictions, average="macro", zero_division=0)
+
+        metrics = {
+            "epoch": epoch_index + 1,
+            "total_epochs": total_epochs,
+            "train_accuracy": train_accuracy,
+            "train_loss": train_loss,
+            "val_accuracy": val_accuracy,
+            "val_loss": val_loss,
+            "f1_score": f1,
+            "progress_percentage": 100.0,
+            "callback_url": callback_url,
+        }
+        logger.info(
+            "Task {} epoch {} metrics: train_acc={:.3f}, val_acc={:.3f}, f1={:.3f}",
+            task_id,
+            epoch_index + 1,
+            train_accuracy,
+            val_accuracy,
+            f1,
+        )
+        progress_handler(epoch_index + 1, metrics)
+
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            best_state = pickle.dumps(classifier)
+
+    if best_state is None:
+        with model_path.open("wb") as handle:
+            pickle.dump(classifier, handle)
+    else:
+        model_path.write_bytes(best_state)
+
+    return {
+        "status": "completed",
+        "model_path": str(model_path),
+        "label_mapping_path": str(label_mapping_path),
+        "embedding_config_path": str(embedding_config_path),
+        "best_val_accuracy": best_val_accuracy,
+        "total_epochs": total_epochs,
+    }
 
 
 def run_training_loop(
@@ -150,6 +462,18 @@ def run_training_loop(
     batch_progress_handler: Callable[[int, int, dict[str, float]], None],
     stop_requested: Callable[[], bool],
 ) -> dict:
+    training_mode = request_payload.get("training_mode", "bert")
+    if training_mode == "setfit":
+        return run_setfit_training(
+            task_id=task_id,
+            request_payload=request_payload,
+            progress_handler=progress_handler,
+            batch_progress_handler=batch_progress_handler,
+            stop_requested=stop_requested,
+        )
+    if training_mode != "bert":
+        raise ValueError(f"Unsupported training mode: {training_mode}")
+
     hp = request_payload["hyperparameters"]
     callback_url = request_payload.get("callback_url")
 

@@ -143,6 +143,8 @@ def start_training_task(self, task_id: str) -> dict:
             "model_path": result["model_path"],
             "label_mapping_path": result["label_mapping_path"],
         }
+        if result.get("embedding_config_path"):
+            artifacts["embedding_config_path"] = result["embedding_config_path"]
         update_task_record(
             task_id,
             {

@@ -1,9 +1,15 @@
 import datetime
+import json
+import math
+import os
+import time
 from pathlib import Path
 from typing import Iterable, Sequence
 
 import click
+import numpy as np
 import pandas as pd
+import requests
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -113,6 +119,128 @@ def timestamped_filename(prefix: str) -> str:
     return f"{prefix}_{ts}.xlsx"
 
 
+def build_embeddings_url(base_url: str) -> str:
+    trimmed = base_url.rstrip("/")
+    if trimmed.endswith("/embeddings"):
+        return trimmed
+    if trimmed.endswith("/v1"):
+        return f"{trimmed}/embeddings"
+    return f"{trimmed}/v1/embeddings"
+
+
+def load_embedding_config(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def resolve_embedding_config(
+    config: dict,
+    base_url: str | None,
+    model: str | None,
+    api_key: str | None,
+    batch_size: int | None,
+    timeout: float | None,
+    max_retries: int | None,
+    extra_headers: dict[str, str] | None,
+) -> dict:
+    resolved = dict(config)
+    if base_url:
+        resolved["base_url"] = base_url
+    if model:
+        resolved["model"] = model
+    if api_key:
+        resolved["api_key"] = api_key
+    if batch_size:
+        resolved["batch_size"] = batch_size
+    if timeout:
+        resolved["timeout"] = timeout
+    if max_retries is not None:
+        resolved["max_retries"] = max_retries
+    if extra_headers:
+        resolved["extra_headers"] = extra_headers
+    return resolved
+
+
+def request_embedding_batch(
+    session: requests.Session,
+    embedding_config: dict,
+    inputs: list[str],
+) -> list[list[float]]:
+    base_url = str(embedding_config["base_url"])
+    url = build_embeddings_url(base_url)
+    headers = {"Content-Type": "application/json"}
+    api_key = embedding_config.get("api_key")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    extra_headers = embedding_config.get("extra_headers") or {}
+    headers.update(extra_headers)
+    payload = {"model": embedding_config["model"], "input": inputs}
+    timeout = embedding_config.get("timeout", 60.0)
+    max_retries = embedding_config.get("max_retries", 2)
+    last_exc: Exception | None = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            response = session.post(url, json=payload, headers=headers, timeout=timeout)
+            response.raise_for_status()
+            data = response.json()
+            if "data" not in data:
+                raise ValueError(f"Embedding response missing 'data': {data}")
+            items = data["data"]
+            if not isinstance(items, list):
+                raise ValueError("Embedding response 'data' is not a list")
+            if items and "index" in items[0]:
+                items = sorted(items, key=lambda item: item.get("index", 0))
+            embeddings = [item["embedding"] for item in items]
+            return embeddings
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= max_retries:
+                raise
+            time.sleep(min(2**attempt, 5))
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("Embedding request failed without an exception")
+
+
+def predict_setfit_batch(
+    texts: Sequence[str],
+    classifier,
+    id_to_label: dict[int, str],
+    embedding_config: dict,
+    top_n: int,
+) -> tuple[list[str], list[list[tuple[str, float]]], list[dict[str, float]]]:
+    labels: list[str] = []
+    top_all: list[list[tuple[str, float]]] = []
+    label_prob_dicts: list[dict[str, float]] = []
+    classes = classifier.classes_
+    session = requests.Session()
+    batch_size = int(embedding_config.get("batch_size") or 64)
+    total_batches = math.ceil(len(texts) / batch_size)
+
+    for batch_idx in range(total_batches):
+        batch_texts = list(texts[batch_idx * batch_size : (batch_idx + 1) * batch_size])
+        embeddings = request_embedding_batch(session, embedding_config, batch_texts)
+        vectors = np.asarray(embeddings, dtype=np.float32)
+        probs = classifier.predict_proba(vectors)
+
+        for row in probs:
+            label_prob_dict = {
+                id_to_label[int(classes[idx])]: float(prob)
+                for idx, prob in enumerate(row)
+            }
+            label_prob_dicts.append(label_prob_dict)
+            sorted_items = sorted(
+                label_prob_dict.items(), key=lambda item: item[1], reverse=True
+            )
+            top_items = sorted_items[:top_n] if top_n > 0 else sorted_items
+            top_all.append(top_items)
+            labels.append(top_items[0][0] if top_items else "")
+
+    return labels, top_all, label_prob_dicts
+
+
 @click.group()
 def cli() -> None:
     """BERT 文本分类推理脚本"""
@@ -207,6 +335,151 @@ def multi_class(
         ]
 
     output_path = Path(output) if output else Path(timestamped_filename("multi_class"))
+    df.to_excel(output_path, index=False)
+    click.echo(f"保存结果到 {output_path}")
+
+
+@cli.command("setfit-multi-class")
+@click.option(
+    "--excel",
+    "excel_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="输入 Excel 文件",
+)
+@click.option("--sheet", "sheet_name", default=None, help="工作表名，可选")
+@click.option("--text-column", required=True, help="文本列名")
+@click.option(
+    "--model-path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="SetFit 分类器 .pkl 路径",
+)
+@click.option(
+    "--label-mapping",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="标签映射 .pkl 路径",
+)
+@click.option(
+    "--embedding-config",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="训练输出的 embedding 配置 .json",
+)
+@click.option(
+    "--base-url",
+    default=None,
+    help="Embedding base URL（优先于环境变量 EMBEDDING_BASE_URL 与配置文件）",
+)
+@click.option(
+    "--embed-model",
+    default=None,
+    help="Embedding 模型名（优先于环境变量 EMBEDDING_MODEL_NAME 与配置文件）",
+)
+@click.option(
+    "--api-key",
+    default=None,
+    help="Embedding API Key，默认读取环境变量 EMBEDDING_API_KEY",
+)
+@click.option(
+    "--embedding-batch-size",
+    default=None,
+    type=int,
+    help="Embedding batch size 覆盖配置文件",
+)
+@click.option(
+    "--timeout",
+    default=None,
+    type=float,
+    help="Embedding 请求超时（秒）覆盖配置文件",
+)
+@click.option(
+    "--max-retries",
+    default=2,
+    show_default=True,
+    type=int,
+    help="Embedding 请求重试次数",
+)
+@click.option(
+    "--extra-headers",
+    default=None,
+    help="额外请求头（JSON 字符串）",
+)
+@click.option("--top-n", default=3, show_default=True, type=int, help="返回前 N 个标签")
+@click.option(
+    "--output",
+    default=None,
+    type=click.Path(dir_okay=False),
+    help="输出文件路径，默认为时间戳命名",
+)
+def setfit_multi_class(
+    excel_path: str,
+    sheet_name: str | None,
+    text_column: str,
+    model_path: str,
+    label_mapping: str,
+    embedding_config: str,
+    base_url: str | None,
+    embed_model: str | None,
+    api_key: str | None,
+    embedding_batch_size: int | None,
+    timeout: float | None,
+    max_retries: int,
+    extra_headers: str | None,
+    top_n: int,
+    output: str | None,
+) -> None:
+    """SetFit 方式多选一分类，使用 embedding 接口推理。"""
+    config = load_embedding_config(Path(embedding_config))
+    env_base_url = os.getenv("EMBEDDING_BASE_URL")
+    env_model = os.getenv("EMBEDDING_MODEL_NAME") or os.getenv("EMBEDDING_MODEL")
+    extra_headers_dict: dict[str, str] | None = None
+    if extra_headers:
+        try:
+            extra_headers_dict = json.loads(extra_headers)
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(f"extra-headers 不是合法 JSON: {exc}") from exc
+        if not isinstance(extra_headers_dict, dict):
+            raise click.ClickException("extra-headers 必须是 JSON 对象")
+    resolved_config = resolve_embedding_config(
+        config,
+        base_url=base_url or env_base_url,
+        model=embed_model or env_model,
+        api_key=api_key or os.getenv("EMBEDDING_API_KEY"),
+        batch_size=embedding_batch_size,
+        timeout=timeout,
+        max_retries=max_retries,
+        extra_headers=extra_headers_dict,
+    )
+    if not resolved_config.get("base_url") or not resolved_config.get("model"):
+        raise click.ClickException("Embedding 配置缺少 base_url 或 model")
+
+    label2id, id2label = load_label_mapping(Path(label_mapping))
+    with Path(model_path).open("rb") as handle:
+        import pickle
+
+        classifier = pickle.load(handle)
+
+    df = pd.read_excel(excel_path, sheet_name=sheet_name)
+    df[text_column] = df[text_column].astype(str).fillna("")
+    texts = df[text_column].tolist()
+
+    labels, top_all, _ = predict_setfit_batch(
+        texts, classifier, id2label, resolved_config, top_n
+    )
+    df["Prediction"] = labels
+
+    if top_n > 0:
+        for rank in range(top_n):
+            df[f"Top{rank + 1}_Label"] = [
+                items[rank][0] if len(items) > rank else None for items in top_all
+            ]
+            df[f"Top{rank + 1}_Probability"] = [
+                items[rank][1] if len(items) > rank else None for items in top_all
+            ]
+
+    output_path = Path(output) if output else Path(timestamped_filename("setfit_multi_class"))
     df.to_excel(output_path, index=False)
     click.echo(f"保存结果到 {output_path}")
 
