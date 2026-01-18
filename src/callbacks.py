@@ -3,11 +3,7 @@ from urllib.parse import urljoin
 import requests
 from loguru import logger
 
-from src.config import (
-    get_callback_timeout,
-    get_external_callback_base_url,
-    get_external_status_callback_url,
-)
+from src.settings import settings
 
 
 STATUS_TYPE_BY_STATUS: dict[str, int] = {
@@ -23,7 +19,7 @@ FAILURE_MESSAGE_REQUIRED = {4, 5}
 
 
 def _post_json(url: str, payload: dict) -> None:
-    timeout = get_callback_timeout()
+    timeout = settings.external_callback_timeout
     logger.debug("Sending callback to {} with payload {}", url, payload)
     try:
         response = requests.post(url, json=payload, timeout=timeout)
@@ -49,7 +45,7 @@ def send_progress_callback(task_id: str, epoch: int, metrics: dict, callback_url
 
 
 def send_external_epoch_callback(task_id: str, epoch: int, metrics: dict) -> None:
-    base_url = get_external_callback_base_url()
+    base_url = settings.external_callback_base_url
     if base_url is None:
         return
     url = urljoin(base_url.rstrip("/") + "/", "api/model/train/notify/result")
@@ -66,7 +62,7 @@ def send_external_epoch_callback(task_id: str, epoch: int, metrics: dict) -> Non
 
 
 def _resolve_status_callback_url() -> str | None:
-    status_url = get_external_status_callback_url()
+    status_url = settings.external_status_callback_url_value
     if status_url:
         trimmed = status_url.rstrip("/")
         sentinel = "/api/model/train/notify/status"
@@ -75,7 +71,7 @@ def _resolve_status_callback_url() -> str | None:
         if sentinel in trimmed:
             return status_url
         return urljoin(trimmed + "/", sentinel.lstrip("/"))
-    base_url = get_external_callback_base_url()
+    base_url = settings.external_callback_base_url
     if base_url is None:
         return None
     return urljoin(base_url.rstrip("/") + "/", "api/model/train/notify/status")

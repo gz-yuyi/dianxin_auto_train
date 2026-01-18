@@ -11,7 +11,7 @@ from src.api.app import create_app
 from src.callbacks import send_external_epoch_callback, send_external_status_change, send_progress_callback
 from src.celery_app import celery_app
 from src.check_service import run_service_check
-from src.config import get_api_host, get_api_port, get_worker_max_concurrency
+from src.settings import settings
 from src.logging_utils import configure_logging
 from src.schemas import TrainingTaskCreateRequest
 from src.training.service import run_training_loop
@@ -45,15 +45,15 @@ def cli() -> None:
 
 
 @cli.command("api")
-@click.option("--host", default=get_api_host(), show_default=True, help="API server host")
-@click.option("--port", default=get_api_port(), show_default=True, type=int, help="API server port")
+@click.option("--host", default=settings.api_host, show_default=True, help="API server host")
+@click.option("--port", default=settings.api_port, show_default=True, type=int, help="API server port")
 def start_api(host: str, port: int) -> None:
     uvicorn.run("src.api.app:create_app", factory=True, host=host, port=port, reload=False)
 
 
 @cli.command("worker")
 def start_worker() -> None:
-    resolved = get_worker_max_concurrency()
+    resolved = settings.worker_max_concurrency()
     if resolved < 1:
         resolved = 1
     logger.info("Starting worker with concurrency {}", resolved)
@@ -148,8 +148,8 @@ def train(payload: str | None, payload_file: str | None, task_id: str | None, ca
 
 
 @cli.command("check-service")
-@click.option("--host", default=get_api_host(), show_default=True, help="API server host")
-@click.option("--port", default=get_api_port(), show_default=True, type=int, help="API server port")
+@click.option("--host", default=settings.api_host, show_default=True, help="API server host")
+@click.option("--port", default=settings.api_port, show_default=True, type=int, help="API server port")
 @click.option(
     "--dataset",
     default=None,

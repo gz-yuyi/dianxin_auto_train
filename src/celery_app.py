@@ -1,6 +1,6 @@
 from celery import Celery
 
-from src.config import get_celery_backend_url, get_celery_broker_url
+from src.settings import settings
 
 # Ensure worker initialisation hooks are registered
 import src.worker_allocation  # noqa: F401
@@ -8,8 +8,8 @@ import src.worker_allocation  # noqa: F401
 
 celery_app = Celery(
     "dianxin_auto_train",
-    broker=get_celery_broker_url(),
-    backend=get_celery_backend_url(),
+    broker=settings.celery_broker_url_value,
+    backend=settings.celery_result_backend_value,
 )
 
 celery_app.conf.update(

@@ -6,7 +6,7 @@ from typing import Any
 
 from redis import Redis
 
-from src.config import get_redis_url
+from src.settings import settings
 
 
 TASK_HASH_KEY = "training:tasks:data"
@@ -19,7 +19,7 @@ _redis: Redis | None = None
 def redis_client() -> Redis:
     global _redis
     if _redis is None:
-        _redis = Redis.from_url(get_redis_url(), decode_responses=True)
+        _redis = Redis.from_url(settings.redis_url, decode_responses=True)
     return _redis
 
 

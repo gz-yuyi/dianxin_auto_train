@@ -19,16 +19,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertModel, BertTokenizer
 
-from src.config import (
-    get_data_root,
-    get_embedding_api_key,
-    get_embedding_base_url,
-    get_embedding_batch_size,
-    get_embedding_max_retries,
-    get_embedding_model_name,
-    get_embedding_timeout,
-    get_model_output_dir,
-)
+from src.settings import settings
 
 
 class TextClassificationDataset(Dataset):
@@ -71,7 +62,7 @@ def resolve_dataset_path(filename: str) -> Path:
     path = Path(filename)
     if path.is_absolute():
         return path
-    return get_data_root() / path
+    return settings.data_root / path
 
 
 def build_embeddings_url(base_url: str) -> str:
@@ -89,6 +80,8 @@ def sanitize_embedding_config(embedding_config: dict) -> dict[str, object]:
         "model": embedding_config.get("model"),
         "batch_size": embedding_config.get("batch_size"),
         "timeout": embedding_config.get("timeout"),
+        "max_retries": embedding_config.get("max_retries"),
+        "parallelism": embedding_config.get("parallelism"),
     }
 
 
@@ -144,7 +137,6 @@ def request_embedding_batch(
 def collect_embeddings(
     texts: list[str],
     embedding_config: dict,
-    session: requests.Session,
     stop_requested: Callable[[], bool],
 ) -> np.ndarray | None:
     if not texts:
@@ -152,14 +144,72 @@ def collect_embeddings(
     batch_size = int(embedding_config.get("batch_size") or 64)
     total_batches = math.ceil(len(texts) / batch_size)
     embeddings: list[list[float]] = []
+    log_interval = max(1, total_batches // 10)
+    parallelism = int(embedding_config.get("parallelism") or 1)
+    parallelism = max(1, parallelism)
 
+    if parallelism <= 1:
+        session = requests.Session()
+        for batch_idx in range(total_batches):
+            if stop_requested():
+                return None
+            batch_texts = texts[batch_idx * batch_size : (batch_idx + 1) * batch_size]
+            batch_embeddings = request_embedding_batch(session, embedding_config, batch_texts)
+            if len(batch_embeddings) != len(batch_texts):
+                raise ValueError("Embedding response size mismatch")
+            embeddings.extend(batch_embeddings)
+            if (batch_idx + 1) % log_interval == 0 or (batch_idx + 1) == total_batches:
+                logger.info(
+                    "Embedding progress: {}/{} batches ({:.1f}%)",
+                    batch_idx + 1,
+                    total_batches,
+                    (batch_idx + 1) * 100.0 / total_batches,
+                )
+        return np.asarray(embeddings, dtype=np.float32)
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def fetch_batch(batch_texts: list[str]) -> list[list[float]]:
+        with requests.Session() as thread_session:
+            return request_embedding_batch(thread_session, embedding_config, batch_texts)
+
+    batch_specs: list[tuple[int, list[str]]] = []
     for batch_idx in range(total_batches):
-        if stop_requested():
-            return None
         batch_texts = texts[batch_idx * batch_size : (batch_idx + 1) * batch_size]
-        batch_embeddings = request_embedding_batch(session, embedding_config, batch_texts)
-        if len(batch_embeddings) != len(batch_texts):
-            raise ValueError("Embedding response size mismatch")
+        batch_specs.append((batch_idx, batch_texts))
+
+    embeddings_by_index: list[list[list[float]] | None] = [None] * total_batches
+    completed = 0
+
+    executor = ThreadPoolExecutor(max_workers=parallelism)
+    futures = {
+        executor.submit(fetch_batch, batch_texts): (batch_idx, len(batch_texts))
+        for batch_idx, batch_texts in batch_specs
+    }
+    try:
+        for future in as_completed(futures):
+            if stop_requested():
+                executor.shutdown(wait=False, cancel_futures=True)
+                return None
+            batch_idx, expected_size = futures[future]
+            batch_embeddings = future.result()
+            if len(batch_embeddings) != expected_size:
+                raise ValueError("Embedding response size mismatch")
+            embeddings_by_index[batch_idx] = batch_embeddings
+            completed += 1
+            if completed % log_interval == 0 or completed == total_batches:
+                logger.info(
+                    "Embedding progress: {}/{} batches ({:.1f}%)",
+                    completed,
+                    total_batches,
+                    completed * 100.0 / total_batches,
+                )
+    finally:
+        executor.shutdown(wait=True, cancel_futures=False)
+
+    for batch_embeddings in embeddings_by_index:
+        if batch_embeddings is None:
+            raise RuntimeError("Missing embedding batch during parallel fetch")
         embeddings.extend(batch_embeddings)
 
     return np.asarray(embeddings, dtype=np.float32)
@@ -266,23 +316,11 @@ def save_label_mappings(mapping_path: Path, label_to_id: dict[str, int], id_to_l
 def resolve_embedding_config(embedding_config: dict | None) -> dict:
     resolved = dict(embedding_config or {})
     if not resolved.get("base_url"):
-        resolved["base_url"] = get_embedding_base_url()
+        resolved["base_url"] = settings.embedding_base_url
     if not resolved.get("model"):
-        resolved["model"] = get_embedding_model_name()
+        resolved["model"] = settings.embedding_model_name_value
     if not resolved.get("api_key"):
-        resolved["api_key"] = get_embedding_api_key()
-    if resolved.get("batch_size") is None:
-        env_batch_size = get_embedding_batch_size()
-        if env_batch_size is not None:
-            resolved["batch_size"] = env_batch_size
-    if resolved.get("timeout") is None:
-        env_timeout = get_embedding_timeout()
-        if env_timeout is not None:
-            resolved["timeout"] = env_timeout
-    if resolved.get("max_retries") is None:
-        env_max_retries = get_embedding_max_retries()
-        if env_max_retries is not None:
-            resolved["max_retries"] = env_max_retries
+        resolved["api_key"] = settings.embedding_api_key
     return resolved
 
 
@@ -325,7 +363,7 @@ def run_setfit_training(
     setup_seed(hp["random_seed"])
     train_df, dev_df = split_dataframe(dataframe, hp)
 
-    output_dir = get_model_output_dir() / task_id
+    output_dir = settings.model_output_path / task_id
     output_dir.mkdir(parents=True, exist_ok=True)
     model_path, label_mapping_path, embedding_config_path = resolve_setfit_artifacts(
         output_dir, request_payload["model_name_en"]
@@ -341,9 +379,8 @@ def run_setfit_training(
     if len(train_labels) == 0 or len(dev_labels) == 0:
         raise ValueError("Training and validation splits must be non-empty")
 
-    session = requests.Session()
     logger.info("Fetching embeddings for {} training samples", len(train_texts))
-    train_vectors = collect_embeddings(train_texts, embedding_config, session, stop_requested)
+    train_vectors = collect_embeddings(train_texts, embedding_config, stop_requested)
     if train_vectors is None:
         logger.info("Stop requested for task {} during embedding fetch", task_id)
         return {
@@ -353,7 +390,7 @@ def run_setfit_training(
             "embedding_config_path": str(embedding_config_path),
         }
     logger.info("Fetching embeddings for {} validation samples", len(dev_texts))
-    dev_vectors = collect_embeddings(dev_texts, embedding_config, session, stop_requested)
+    dev_vectors = collect_embeddings(dev_texts, embedding_config, stop_requested)
     if dev_vectors is None:
         logger.info("Stop requested for task {} during embedding fetch", task_id)
         return {
@@ -529,7 +566,7 @@ def run_training_loop(
         hp["label_column"],
     )
 
-    output_dir = get_model_output_dir() / task_id
+    output_dir = settings.model_output_path / task_id
     output_dir.mkdir(parents=True, exist_ok=True)
     # Artifacts naming convention:
     # - model weights: <name>.pt

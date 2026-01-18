@@ -22,6 +22,9 @@ class EmbeddingConfig(BaseModel):
     batch_size: int = Field(64, ge=1, description="Batch size for embedding requests")
     timeout: float = Field(60.0, gt=0.0, description="Embedding request timeout (seconds)")
     max_retries: int = Field(2, ge=0, description="Embedding request retry count")
+    parallelism: int | None = Field(
+        None, ge=1, description="Parallel embedding request count"
+    )
     extra_headers: dict[str, str] | None = Field(None, description="Extra headers for embedding requests")
 
 

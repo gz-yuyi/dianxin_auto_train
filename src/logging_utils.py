@@ -1,11 +1,11 @@
 from loguru import logger
 
-from src.config import env_str
+from src.settings import settings
 
 
 def configure_logging() -> None:
     logger.remove()
-    level = env_str("LOG_LEVEL", "INFO")
+    level = settings.log_level
     logger.add(
         sink=lambda msg: print(msg, end=""),
         level=level,

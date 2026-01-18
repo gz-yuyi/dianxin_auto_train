@@ -4,12 +4,12 @@ from multiprocessing import current_process
 from celery import signals
 from loguru import logger
 
-from src.config import parse_visible_gpu_devices
+from src.settings import settings
 from src.logging_utils import configure_logging
 
 
 def available_gpu_devices() -> list[str]:
-    devices = parse_visible_gpu_devices()
+    devices = settings.visible_gpu_devices()
     if devices:
         return devices
     try:

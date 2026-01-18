@@ -5,7 +5,7 @@ from typing import Any
 import requests
 from loguru import logger
 
-from src.config import get_data_root
+from src.settings import settings
 
 
 DEFAULT_TIMEOUT = 600
@@ -40,7 +40,7 @@ def resolve_training_file(filename: str | None) -> str:
         filename = default_file
     path = Path(filename)
     if not path.is_absolute():
-        path = get_data_root() / path
+        path = settings.data_root / path
     if not path.exists():
         raise FileNotFoundError(f"Dataset not found: {path}")
     return str(path)
