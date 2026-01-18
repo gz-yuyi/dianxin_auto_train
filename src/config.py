@@ -24,10 +24,30 @@ def env_int(name: str, default: int) -> int:
     return int(value)
 
 
+def env_int_optional(name: str) -> int | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    return int(value)
+
+
 def env_float(name: str, default: float) -> float:
     value = os.getenv(name)
     if value is None:
         return default
+    return float(value)
+
+
+def env_float_optional(name: str) -> float | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    value = value.strip()
+    if not value:
+        return None
     return float(value)
 
 
@@ -98,6 +118,30 @@ def parse_visible_gpu_devices() -> list[str]:
     return [device for device in devices if device]
 
 
+def get_embedding_base_url() -> str | None:
+    return env_str("EMBEDDING_BASE_URL")
+
+
+def get_embedding_model_name() -> str | None:
+    return env_str("EMBEDDING_MODEL_NAME") or env_str("EMBEDDING_MODEL")
+
+
+def get_embedding_api_key() -> str | None:
+    return env_str("EMBEDDING_API_KEY")
+
+
+def get_embedding_batch_size() -> int | None:
+    return env_int_optional("EMBEDDING_BATCH_SIZE")
+
+
+def get_embedding_timeout() -> float | None:
+    return env_float_optional("EMBEDDING_TIMEOUT")
+
+
+def get_embedding_max_retries() -> int | None:
+    return env_int_optional("EMBEDDING_MAX_RETRIES")
+
+
 def get_worker_max_concurrency() -> int:
     visible_devices = parse_visible_gpu_devices()
     if visible_devices:
@@ -113,6 +157,12 @@ __all__ = [
     "get_celery_broker_url",
     "get_callback_timeout",
     "get_data_root",
+    "get_embedding_api_key",
+    "get_embedding_base_url",
+    "get_embedding_batch_size",
+    "get_embedding_max_retries",
+    "get_embedding_model_name",
+    "get_embedding_timeout",
     "get_external_callback_base_url",
     "get_external_publish_callback_url",
     "get_external_status_callback_url",

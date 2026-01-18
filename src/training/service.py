@@ -19,7 +19,16 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertModel, BertTokenizer
 
-from src.config import get_data_root, get_model_output_dir
+from src.config import (
+    get_data_root,
+    get_embedding_api_key,
+    get_embedding_base_url,
+    get_embedding_batch_size,
+    get_embedding_max_retries,
+    get_embedding_model_name,
+    get_embedding_timeout,
+    get_model_output_dir,
+)
 
 
 class TextClassificationDataset(Dataset):
@@ -254,6 +263,29 @@ def save_label_mappings(mapping_path: Path, label_to_id: dict[str, int], id_to_l
         pickle.dump((label_to_id, id_to_label), handle)
 
 
+def resolve_embedding_config(embedding_config: dict | None) -> dict:
+    resolved = dict(embedding_config or {})
+    if not resolved.get("base_url"):
+        resolved["base_url"] = get_embedding_base_url()
+    if not resolved.get("model"):
+        resolved["model"] = get_embedding_model_name()
+    if not resolved.get("api_key"):
+        resolved["api_key"] = get_embedding_api_key()
+    if resolved.get("batch_size") is None:
+        env_batch_size = get_embedding_batch_size()
+        if env_batch_size is not None:
+            resolved["batch_size"] = env_batch_size
+    if resolved.get("timeout") is None:
+        env_timeout = get_embedding_timeout()
+        if env_timeout is not None:
+            resolved["timeout"] = env_timeout
+    if resolved.get("max_retries") is None:
+        env_max_retries = get_embedding_max_retries()
+        if env_max_retries is not None:
+            resolved["max_retries"] = env_max_retries
+    return resolved
+
+
 def resolve_setfit_artifacts(output_dir: Path, model_name_en: str) -> tuple[Path, Path, Path]:
     base_name = model_name_en
     if base_name.endswith(".pkl"):
@@ -274,11 +306,12 @@ def run_setfit_training(
 ) -> dict:
     hp = request_payload["hyperparameters"]
     callback_url = request_payload.get("callback_url")
-    embedding_config = request_payload.get("embedding")
-    if not embedding_config:
-        raise ValueError("Embedding config is required for setfit training")
-    if "base_url" not in embedding_config or "model" not in embedding_config:
-        raise ValueError("Embedding config must include base_url and model")
+    embedding_config = resolve_embedding_config(request_payload.get("embedding"))
+    if not embedding_config.get("base_url") or not embedding_config.get("model"):
+        raise ValueError(
+            "Embedding config requires base_url and model (payload or "
+            "EMBEDDING_BASE_URL/EMBEDDING_MODEL_NAME environment variables)"
+        )
 
     logger.info("Starting setfit training task {}", task_id)
 
