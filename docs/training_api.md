@@ -23,6 +23,10 @@
         "epochs": 10,
         "batch_size": 64,
         "max_sequence_length": 512,
+        "early_stopping_enabled": false,
+        "early_stopping_patience": 3,
+        "early_stopping_min_delta": 0.0,
+        "early_stopping_metric": "val_accuracy",
         "random_seed": 42,
         "train_val_split": 0.2,
         "text_column": "内容合并",
@@ -41,6 +45,7 @@
 }
 ```
 > `validation_data_file` 可选，提供时将使用该文件作为验证集并忽略 `train_val_split`。
+> `early_stopping_enabled` 仅在有验证集时生效；`early_stopping_metric` 支持 `val_accuracy`、`val_loss`、`f1_score`。
 > `lora` 为可选配置，启用后会使用 LoRA 训练；任务完成后 `artifacts` 会额外返回 `lora_adapter_path` 与 `classifier_head_path`。
 
 **响应**:

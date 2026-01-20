@@ -321,9 +321,22 @@ def run_training_loop(
         return torch.cuda.amp.autocast(dtype=amp_dtype)
 
     best_val_accuracy = 0.0
+    best_model_metric: float | None = None
+    early_stop_enabled = bool(hp.get("early_stopping_enabled", False))
+    early_stop_patience = int(hp.get("early_stopping_patience", 3))
+    early_stop_min_delta = float(hp.get("early_stopping_min_delta", 0.0))
+    early_stop_metric = str(hp.get("early_stopping_metric", "val_accuracy")).lower()
+    if early_stop_metric not in {"val_accuracy", "val_loss", "f1_score"}:
+        raise ValueError(
+            "early_stopping_metric must be one of: val_accuracy, val_loss, f1_score"
+        )
+    epochs_without_improvement = 0
 
     total_epochs = hp["epochs"]
     has_validation = dev_size > 0
+    if early_stop_enabled and not has_validation:
+        logger.warning("Early stopping enabled but no validation data; disabling.")
+        early_stop_enabled = False
 
     def build_result(status: str) -> dict:
         result = {
@@ -338,6 +351,8 @@ def run_training_loop(
             result["classifier_head_path"] = str(classifier_head_path)
         return result
 
+    early_stopped = False
+    epochs_ran = 0
     for epoch_index in range(total_epochs):
         if stop_requested():
             logger.info("Stop requested for task {}", task_id)
@@ -444,11 +459,37 @@ def run_training_loop(
             f1,
         )
         progress_handler(epoch_index + 1, metrics)
+        epochs_ran = epoch_index + 1
 
         if has_validation:
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
+
+            if early_stop_metric == "val_accuracy":
+                current_metric = val_accuracy
+                better = best_model_metric is None or current_metric > best_model_metric + early_stop_min_delta
+            elif early_stop_metric == "val_loss":
+                current_metric = val_loss
+                better = best_model_metric is None or current_metric < best_model_metric - early_stop_min_delta
+            else:
+                current_metric = f1
+                better = best_model_metric is None or current_metric > best_model_metric + early_stop_min_delta
+
+            if better:
+                best_model_metric = current_metric
+                epochs_without_improvement = 0
                 save_model_artifacts()
+            else:
+                epochs_without_improvement += 1
+                if early_stop_enabled and epochs_without_improvement >= early_stop_patience:
+                    logger.info(
+                        "Early stopping at epoch {} (metric {} did not improve for {} epochs)",
+                        epoch_index + 1,
+                        early_stop_metric,
+                        epochs_without_improvement,
+                    )
+                    early_stopped = True
+                    break
 
     if not has_validation:
         save_model_artifacts()
@@ -456,6 +497,8 @@ def run_training_loop(
     result = build_result("completed")
     result["best_val_accuracy"] = best_val_accuracy
     result["total_epochs"] = total_epochs
+    result["epochs_completed"] = epochs_ran
+    result["early_stopped"] = early_stopped
     return result
 
 
