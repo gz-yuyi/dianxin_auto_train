@@ -16,6 +16,7 @@
     "model_name_cn": "环境保护污染分类模型",
     "model_name_en": "environmental_pollution_classifier",
     "training_data_file": "环境保护_空气污染--样例1000.xlsx",
+    "validation_data_file": "环境保护_空气污染--验证.xlsx",
     "base_model": "bert-base-chinese",
     "hyperparameters": {
         "learning_rate": 3e-5,
@@ -27,6 +28,7 @@
         "text_column": "内容合并",
         "label_column": "标签列",
         "sheet_name": null,
+        "validation_sheet_name": null,
         "lora": {
             "enabled": true,
             "r": 8,
@@ -38,6 +40,7 @@
     "callback_url": "http://example.com/training/callback"
 }
 ```
+> `validation_data_file` 可选，提供时将使用该文件作为验证集并忽略 `train_val_split`。
 > `lora` 为可选配置，启用后会使用 LoRA 训练；任务完成后 `artifacts` 会额外返回 `lora_adapter_path` 与 `classifier_head_path`。
 
 **响应**:

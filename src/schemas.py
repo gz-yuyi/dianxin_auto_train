@@ -26,6 +26,7 @@ class HyperParameters(BaseModel):
     text_column: str = Field(..., description="Name of text column in dataset")
     label_column: str = Field(..., description="Name of label column in dataset")
     sheet_name: str | None = Field(None, description="Excel sheet name if applicable")
+    validation_sheet_name: str | None = Field(None, description="Validation Excel sheet name if applicable")
     lora: LoraConfig | None = Field(None, description="Optional LoRA configuration")
 
 
@@ -33,6 +34,7 @@ class TrainingTaskCreateRequest(BaseModel):
     model_name_cn: str
     model_name_en: str
     training_data_file: str
+    validation_data_file: str | None = None
     base_model: str = "bert-base-chinese"
     hyperparameters: HyperParameters
     callback_url: HttpUrl | None = Field(None, description="Optional callback endpoint for progress notifications")

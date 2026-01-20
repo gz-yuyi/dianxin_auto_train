@@ -137,6 +137,7 @@ def prepare_dataframe(
     sheet_name: str | None,
     text_column: str,
     label_column: str,
+    label_to_id: dict[str, int] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, int], dict[int, str]]:
     if sheet_name is None:
         dataframe = pd.read_excel(dataset_path)
@@ -146,9 +147,14 @@ def prepare_dataframe(
     dataframe[text_column] = dataframe[text_column].astype(str).fillna("")
     labels = dataframe[label_column].astype(str)
     dataframe[label_column] = labels
-    # Align with legacy/Bert_Train_Sample_V1.py: keep appearance order (no sorting).
-    unique_labels = list(labels.unique())
-    label_to_id = {label: idx for idx, label in enumerate(unique_labels)}
+    if label_to_id is None:
+        # Align with legacy/Bert_Train_Sample_V1.py: keep appearance order (no sorting).
+        unique_labels = list(labels.unique())
+        label_to_id = {label: idx for idx, label in enumerate(unique_labels)}
+    else:
+        unknown = sorted(set(labels.unique()) - set(label_to_id.keys()))
+        if unknown:
+            raise ValueError(f"Validation labels not in training set: {unknown}")
     id_to_label = {idx: label for label, idx in label_to_id.items()}
     dataframe[label_column] = dataframe[label_column].map(label_to_id)
     return dataframe, label_to_id, id_to_label
@@ -160,10 +166,14 @@ def build_dataloaders(
     hp: dict,
     text_column: str,
     label_column: str,
+    validation_dataframe: pd.DataFrame | None = None,
 ) -> tuple[DataLoader, DataLoader, int]:
     # Align with legacy/Bert_Train_Sample_V1.py: dataset split uses a fixed random_state=42
     # (independent from training random seed).
-    if hp["train_val_split"] == 0:
+    if validation_dataframe is not None:
+        train_df = dataframe
+        dev_df = validation_dataframe
+    elif hp["train_val_split"] == 0:
         train_df = dataframe
         dev_df = dataframe.iloc[0:0]
     else:
@@ -213,6 +223,17 @@ def run_training_loop(
         text_column=hp["text_column"],
         label_column=hp["label_column"],
     )
+    validation_dataframe = None
+    validation_file = request_payload.get("validation_data_file")
+    if validation_file:
+        validation_path = resolve_dataset_path(validation_file)
+        validation_dataframe, _, _ = prepare_dataframe(
+            dataset_path=validation_path,
+            sheet_name=hp.get("validation_sheet_name"),
+            text_column=hp["text_column"],
+            label_column=hp["label_column"],
+            label_to_id=label_to_id,
+        )
     setup_seed(hp["random_seed"])
     tokenizer = AutoTokenizer.from_pretrained(request_payload["base_model"])
     train_loader, dev_loader, dev_size = build_dataloaders(
@@ -221,6 +242,7 @@ def run_training_loop(
         hp,
         hp["text_column"],
         hp["label_column"],
+        validation_dataframe=validation_dataframe,
     )
 
     output_dir = get_model_output_dir() / task_id
