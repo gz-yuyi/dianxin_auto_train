@@ -88,6 +88,26 @@ def get_callback_timeout() -> float:
     return env_float("EXTERNAL_CALLBACK_TIMEOUT", 10.0)
 
 
+def get_inference_base_model() -> str:
+    return env_str("INFERENCE_BASE_MODEL", "bert-base-chinese") or "bert-base-chinese"
+
+
+def get_inference_workers_per_gpu() -> int:
+    return env_int("INFERENCE_WORKERS_PER_GPU", 1)
+
+
+def get_inference_max_batch_size() -> int:
+    return env_int("INFERENCE_MAX_BATCH_SIZE", 16)
+
+
+def get_inference_queue_age_weight_seconds() -> float:
+    return env_float("INFERENCE_QUEUE_AGE_WEIGHT_SECONDS", 5.0)
+
+
+def get_inference_unload_timeout() -> float:
+    return env_float("INFERENCE_UNLOAD_TIMEOUT", 60.0)
+
+
 def parse_visible_gpu_devices() -> list[str]:
     raw = env_str("GPU_VISIBLE_DEVICES")
     if raw is None:
@@ -116,6 +136,11 @@ __all__ = [
     "get_external_callback_base_url",
     "get_external_publish_callback_url",
     "get_external_status_callback_url",
+    "get_inference_base_model",
+    "get_inference_max_batch_size",
+    "get_inference_queue_age_weight_seconds",
+    "get_inference_unload_timeout",
+    "get_inference_workers_per_gpu",
     "get_model_output_dir",
     "get_redis_url",
     "parse_visible_gpu_devices",

@@ -108,7 +108,7 @@ A GitHub Actions workflow (`.github/workflows/docker-build-push.yml`) builds the
 
 ### APIs
 The service exposes REST endpoints under `/api/v1/training/tasks`. Key operations:
-- `POST /training/tasks` – submit a training job (see `docs/api.md` for payload schema)
+- `POST /training/tasks` – submit a training job (see `docs/training_api.md` for payload schema)
 - `GET /training/tasks/{task_id}` – fetch task status and metrics
 - `GET /training/tasks` – list tasks with optional status filtering
 - `POST /training/tasks/{task_id}/stop` – request job cancellation

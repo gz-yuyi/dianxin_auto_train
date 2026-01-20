@@ -98,10 +98,51 @@ class DeleteTaskResponse(BaseModel):
     message: str
 
 
+class LoraModelLoadRequest(BaseModel):
+    model_dir: str
+    max_length: int = Field(512, ge=8, description="Maximum token length for inference")
+
+
+class LoraModelLoadResponse(BaseModel):
+    model_id: str
+    status: str
+    message: str
+
+
+class LoraModelUnloadRequest(BaseModel):
+    model_id: str
+
+
+class LoraModelUnloadResponse(BaseModel):
+    model_id: str
+    status: str
+    message: str
+
+
+class LoraPredictRequest(BaseModel):
+    model_id: str
+    texts: list[str]
+    top_n: int = Field(3, ge=1, description="Return top-N labels")
+    batch_size: int = Field(16, ge=1, description="Requested batch size (best effort)")
+
+
+class LoraPredictResponse(BaseModel):
+    model_id: str
+    labels: list[str]
+    top_n: list[list[tuple[str, float]]]
+    label_probabilities: list[dict[str, float]]
+
+
 __all__ = [
     "DeleteTaskResponse",
     "HyperParameters",
     "LoraConfig",
+    "LoraModelLoadRequest",
+    "LoraModelLoadResponse",
+    "LoraModelUnloadRequest",
+    "LoraModelUnloadResponse",
+    "LoraPredictRequest",
+    "LoraPredictResponse",
     "StopTaskResponse",
     "TaskProgress",
     "TrainingTaskCreateRequest",
