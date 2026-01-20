@@ -114,6 +114,15 @@ The service exposes REST endpoints under `/api/v1/training/tasks`. Key operation
 - `POST /training/tasks/{task_id}/stop` – request job cancellation
 - `DELETE /training/tasks/{task_id}` – remove task metadata
 
+### LoRA Inference Service
+The service provides a LoRA-only inference API that loads adapters by model directory name and routes requests
+through a shared base model. See `docs/lora_inference_api.md` for the full schema.
+
+- Model directory: use the training output directory name (for example the `task_id` under `artifacts/`).
+- Adapter + head naming: `<model_name_en>.lora` and `<model_name_en>.head.pt` under that directory.
+- Key endpoints: `POST /inference/models/load`, `POST /inference/predict`, `POST /inference/models/unload`.
+- Worker settings: `INFERENCE_BASE_MODEL`, `INFERENCE_WORKERS_PER_GPU`, `INFERENCE_MAX_BATCH_SIZE`.
+
 ### Callbacks
 Each epoch publishes progress to any `callback_url` provided in the submission and to the external endpoints defined in `.env` (`EXTERNAL_CALLBACK_BASE_URL` / `EXTERNAL_PUBLISH_CALLBACK_URL`). See `docs/external_callback.md` for payload formats.
 

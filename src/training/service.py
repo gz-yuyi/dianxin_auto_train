@@ -88,11 +88,15 @@ def normalize_lora_config(hp: dict) -> dict | None:
     if not raw or not raw.get("enabled", False):
         return None
     target_modules = raw.get("target_modules") or ["query", "value"]
+    if isinstance(target_modules, str):
+        target_modules_value: list[str] | str = target_modules
+    else:
+        target_modules_value = list(target_modules)
     return {
         "r": int(raw.get("r", 8)),
         "lora_alpha": float(raw.get("lora_alpha", 16)),
         "lora_dropout": float(raw.get("lora_dropout", 0.1)),
-        "target_modules": list(target_modules),
+        "target_modules": target_modules_value,
         "bias": "none",
     }
 

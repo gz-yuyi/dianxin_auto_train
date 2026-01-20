@@ -8,9 +8,9 @@ class LoraConfig(BaseModel):
     r: int = Field(8, ge=1, description="LoRA rank")
     lora_alpha: float = Field(16, gt=0, description="LoRA alpha")
     lora_dropout: float = Field(0.1, ge=0.0, lt=1.0, description="LoRA dropout")
-    target_modules: list[str] = Field(
+    target_modules: list[str] | str = Field(
         default_factory=lambda: ["query", "value"],
-        description="Target module names for LoRA injection",
+        description="Target module names for LoRA injection, or 'all-linear'",
     )
 
 
