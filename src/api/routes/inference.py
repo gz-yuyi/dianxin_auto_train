@@ -2,12 +2,17 @@ from fastapi import APIRouter, HTTPException
 
 from src.inference.service import get_inference_manager
 from src.schemas import (
+    InferenceServiceStatusResponse,
     LoraModelLoadRequest,
     LoraModelLoadResponse,
     LoraModelUnloadRequest,
     LoraModelUnloadResponse,
     LoraPredictRequest,
     LoraPredictResponse,
+    ModelInfo,
+    ModelListResponse,
+    ModelQueryRequest,
+    WorkerStatus,
 )
 
 
@@ -55,3 +60,40 @@ def predict_lora(payload: LoraPredictRequest) -> LoraPredictResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     result = future.result()
     return LoraPredictResponse(**result)
+
+
+@router.get("/models", response_model=ModelListResponse)
+def list_models() -> ModelListResponse:
+    """获取所有可用模型列表及其状态"""
+    manager = get_inference_manager()
+    models_data = manager.list_models()
+    models = [ModelInfo(**m) for m in models_data]
+    loaded_count = sum(1 for m in models if m.status == "loaded")
+    return ModelListResponse(models=models, total=len(models), loaded_count=loaded_count)
+
+
+@router.post("/models/query", response_model=ModelListResponse)
+def query_models(payload: ModelQueryRequest) -> ModelListResponse:
+    """根据模型ID列表查询模型"""
+    if not payload.model_ids:
+        raise HTTPException(status_code=400, detail="model_ids must not be empty")
+    manager = get_inference_manager()
+    models_data = manager.query_models(payload.model_ids)
+    models = [ModelInfo(**m) for m in models_data]
+    loaded_count = sum(1 for m in models if m.status == "loaded")
+    return ModelListResponse(models=models, total=len(models), loaded_count=loaded_count)
+
+
+@router.get("/status", response_model=InferenceServiceStatusResponse)
+def get_service_status() -> InferenceServiceStatusResponse:
+    """获取推理服务状态，包括Worker和显存信息"""
+    manager = get_inference_manager()
+    status_data = manager.get_service_status()
+    workers = [WorkerStatus(**w) for w in status_data["workers"]]
+    return InferenceServiceStatusResponse(
+        service_status=status_data["service_status"],
+        workers=workers,
+        total_workers=status_data["total_workers"],
+        loaded_models_count=status_data["loaded_models_count"],
+        pending_requests=status_data["pending_requests"],
+    )

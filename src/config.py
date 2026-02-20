@@ -39,16 +39,39 @@ def get_api_port() -> int:
     return env_int("API_PORT", 8000)
 
 
+def _build_redis_url(db: int) -> str:
+    """Build Redis URL from separate configuration variables."""
+    host = env_str("REDIS_HOST", "localhost")
+    port = env_int("REDIS_PORT", 6379)
+    password = env_str("REDIS_PASSWORD")
+    username = env_str("REDIS_USERNAME")
+    
+    # Build authentication part
+    auth = ""
+    if username and password:
+        auth = f"{username}:{password}@"
+    elif password:
+        auth = f":{password}@"
+    
+    return f"redis://{auth}{host}:{port}/{db}"
+
+
 def get_redis_url() -> str:
-    return env_str("REDIS_URL", "redis://localhost:6379/0")
+    """Get main Redis URL (for storage)."""
+    db = env_int("REDIS_DB_MAIN", 0)
+    return _build_redis_url(db)
 
 
 def get_celery_broker_url() -> str:
-    return env_str("CELERY_BROKER_URL", get_redis_url())
+    """Get Celery broker URL."""
+    db = env_int("REDIS_DB_BROKER", 1)
+    return _build_redis_url(db)
 
 
 def get_celery_backend_url() -> str:
-    return env_str("CELERY_RESULT_BACKEND", get_celery_broker_url())
+    """Get Celery result backend URL."""
+    db = env_int("REDIS_DB_BACKEND", 2)
+    return _build_redis_url(db)
 
 
 def get_model_output_dir() -> Path:

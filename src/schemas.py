@@ -142,9 +142,49 @@ class LoraPredictResponse(BaseModel):
     label_probabilities: list[dict[str, float]]
 
 
+class ModelInfo(BaseModel):
+    """模型信息"""
+    model_id: str
+    status: str = Field(..., description="Model status: loaded/unloaded")
+    gpu_id: int | None = Field(None, description="GPU ID where model is loaded")
+    uptime_seconds: float | None = Field(None, description="Uptime in seconds if loaded")
+
+
+class ModelListResponse(BaseModel):
+    """模型列表响应"""
+    models: list[ModelInfo]
+    total: int
+    loaded_count: int
+
+
+class ModelQueryRequest(BaseModel):
+    """模型查询请求"""
+    model_ids: list[str] = Field(..., min_length=1, description="List of model IDs to query")
+
+
+class WorkerStatus(BaseModel):
+    """Worker 状态信息"""
+    worker_id: str
+    device: str
+    total_memory_mb: float
+    used_memory_mb: float
+    free_memory_mb: float
+    memory_usage_percent: float
+
+
+class InferenceServiceStatusResponse(BaseModel):
+    """推理服务状态响应"""
+    service_status: str = Field(..., description="Service status: running/starting/error")
+    workers: list[WorkerStatus]
+    total_workers: int
+    loaded_models_count: int
+    pending_requests: int
+
+
 __all__ = [
     "DeleteTaskResponse",
     "HyperParameters",
+    "InferenceServiceStatusResponse",
     "LoraConfig",
     "LoraModelLoadRequest",
     "LoraModelLoadResponse",
@@ -152,6 +192,9 @@ __all__ = [
     "LoraModelUnloadResponse",
     "LoraPredictRequest",
     "LoraPredictResponse",
+    "ModelInfo",
+    "ModelListResponse",
+    "ModelQueryRequest",
     "StopTaskResponse",
     "TaskProgress",
     "TrainingTaskCreateRequest",
@@ -159,4 +202,5 @@ __all__ = [
     "TrainingTaskListItem",
     "TrainingTaskListResponse",
     "TrainingTaskResponse",
+    "WorkerStatus",
 ]

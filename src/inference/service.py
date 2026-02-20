@@ -26,6 +26,9 @@ from src.config import (
     get_model_output_dir,
 )
 
+# Global lock for model loading to prevent meta tensor issues with multiple GPUs
+_MODEL_LOAD_LOCK = threading.Lock()
+
 
 class InferenceRequest:
     def __init__(self, model_id: str, texts: list[str], top_n: int):
@@ -90,6 +93,7 @@ class AdapterState:
     draining: bool = False
     active_batches: int = 0
     unload_event: threading.Event = field(default_factory=threading.Event)
+    loaded_at: float = field(default_factory=time.time)
 
 
 class InferenceTextClassifier(nn.Module):
@@ -184,13 +188,24 @@ class InferenceWorker:
                 self.manager.finish_batch(adapter_id)
 
     def _initialize(self) -> None:
-        if self.device.type == "cuda":
-            torch.cuda.set_device(self.device)
-        self._base_model = AutoModel.from_pretrained(self.base_model_name).to(self.device)
-        self._base_model.eval()
-        self._tokenizer = AutoTokenizer.from_pretrained(self.base_model_name)
-        self._classifier = InferenceTextClassifier(self._base_model).to(self.device)
-        self._classifier.eval()
+        # 使用全局锁确保只有一个 Worker 同时加载模型
+        # 这是为了避免多 GPU 环境下出现 meta tensor 错误
+        with _MODEL_LOAD_LOCK:
+            if self.device.type == "cuda":
+                torch.cuda.set_device(self.device)
+            
+            # 加载基础模型到 CPU，然后转移到目标设备
+            self._base_model = AutoModel.from_pretrained(self.base_model_name)
+            self._base_model = self._base_model.to(self.device)
+            self._base_model.eval()
+            
+            self._tokenizer = AutoTokenizer.from_pretrained(self.base_model_name)
+            
+            # 创建分类器并转移到目标设备
+            self._classifier = InferenceTextClassifier(self._base_model)
+            self._classifier = self._classifier.to(self.device)
+            self._classifier.eval()
+        
         logger.info("Worker {} ready on {}", self.worker_id, self.device)
 
     def _drain_control_queue(self) -> None:
@@ -437,6 +452,101 @@ class LoraInferenceManager:
     def get_adapter_state(self, adapter_id: str) -> AdapterState | None:
         with self.lock:
             return self.adapter_states.get(adapter_id)
+
+    def list_models(self) -> list[dict]:
+        """列出所有模型及其状态"""
+        models = []
+        model_output_dir = get_model_output_dir()
+        
+        if model_output_dir.exists():
+            for model_dir in model_output_dir.iterdir():
+                if model_dir.is_dir():
+                    model_id = model_dir.name
+                    with self.lock:
+                        state = self.adapter_states.get(model_id)
+                    
+                    if state is not None:
+                        # 模型已加载
+                        uptime = time.time() - state.loaded_at
+                        # 获取 GPU ID（从任意一个 worker 获取）
+                        gpu_id = None
+                        if self.workers:
+                            gpu_id = self.workers[0].device.index if self.workers[0].device.type == "cuda" else None
+                        models.append({
+                            "model_id": model_id,
+                            "status": "loaded",
+                            "gpu_id": gpu_id,
+                            "uptime_seconds": round(uptime, 2)
+                        })
+                    else:
+                        # 模型未加载但目录存在
+                        models.append({
+                            "model_id": model_id,
+                            "status": "unloaded",
+                            "gpu_id": None,
+                            "uptime_seconds": None
+                        })
+        
+        return models
+
+    def query_models(self, model_ids: list[str]) -> list[dict]:
+        """根据模型ID列表查询模型"""
+        all_models = {m["model_id"]: m for m in self.list_models()}
+        result = []
+        for model_id in model_ids:
+            if model_id in all_models:
+                result.append(all_models[model_id])
+        return result
+
+    def get_service_status(self) -> dict:
+        """获取推理服务状态"""
+        workers_status = []
+        
+        for worker in self.workers:
+            device = worker.device
+            worker_status = {
+                "worker_id": worker.worker_id,
+                "device": str(device),
+                "total_memory_mb": 0.0,
+                "used_memory_mb": 0.0,
+                "free_memory_mb": 0.0,
+                "memory_usage_percent": 0.0
+            }
+            
+            if device.type == "cuda" and torch.cuda.is_available():
+                try:
+                    total_memory = torch.cuda.get_device_properties(device).total_memory
+                    reserved = torch.cuda.memory_reserved(device)
+                    allocated = torch.cuda.memory_allocated(device)
+                    free = total_memory - reserved
+                    
+                    total_mb = total_memory / 1024 / 1024
+                    used_mb = allocated / 1024 / 1024
+                    free_mb = free / 1024 / 1024
+                    
+                    worker_status["total_memory_mb"] = round(total_mb, 2)
+                    worker_status["used_memory_mb"] = round(used_mb, 2)
+                    worker_status["free_memory_mb"] = round(free_mb, 2)
+                    worker_status["memory_usage_percent"] = round((used_mb / total_mb) * 100, 2) if total_mb > 0 else 0.0
+                except Exception:
+                    pass
+            
+            workers_status.append(worker_status)
+        
+        # 统计待处理请求数
+        pending_count = 0
+        with self.lock:
+            for queue_ref in self.adapter_queues.values():
+                pending_count += len(queue_ref)
+            loaded_count = len(self.adapter_states)
+        
+        return {
+            "service_status": "running" if self.workers else "starting",
+            "workers": workers_status,
+            "total_workers": len(self.workers),
+            "loaded_models_count": loaded_count,
+            "pending_requests": pending_count
+        }
 
     def _available_devices(self) -> list[torch.device]:
         if torch.cuda.is_available():

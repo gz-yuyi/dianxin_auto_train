@@ -240,5 +240,134 @@ def download_model(model_name: str, output_dir: str, source: str) -> None:
         logger.info(f"Model successfully downloaded from Hugging Face to {output_dir}")
 
 
+@cli.command("export-openapi")
+@click.option(
+    "--output",
+    "-o",
+    default="openapi.json",
+    show_default=True,
+    help="Output file path for OpenAPI JSON",
+)
+@click.option(
+    "--pretty/--no-pretty",
+    default=False,
+    help="Pretty print JSON output",
+    show_default=True,
+)
+def export_openapi(output: str, pretty: bool) -> None:
+    """Export OpenAPI/Swagger schema to JSON file."""
+    app = create_app()
+    openapi_schema = app.openapi()
+    
+    indent = 2 if pretty else None
+    with open(output, "w", encoding="utf-8") as f:
+        json.dump(openapi_schema, f, ensure_ascii=False, indent=indent)
+    
+    logger.info(f"OpenAPI schema exported to {output}")
+    click.echo(f"OpenAPI schema saved to: {output}")
+
+
+@cli.command("smoke-test")
+@click.option(
+    "--port",
+    default=8001,
+    show_default=True,
+    type=int,
+    help="API server port for smoke test (use non-default to avoid conflicts)",
+)
+@click.option(
+    "--training-timeout",
+    default=600,
+    show_default=True,
+    type=int,
+    help="Maximum seconds to wait for training completion",
+)
+@click.option(
+    "--epochs",
+    default=2,
+    show_default=True,
+    type=int,
+    help="Number of training epochs for smoke test",
+)
+def smoke_test(port: int, training_timeout: int, epochs: int) -> None:
+    """Run smoke test: start services, train model, test all inference APIs."""
+    import sys
+    from pathlib import Path
+    
+    # 添加 scripts 目录到路径
+    scripts_dir = Path(__file__).parent / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    
+    # 导入并运行冒烟测试
+    from smoke_test import main as smoke_test_main
+    
+    # 覆盖配置
+    import smoke_test as st
+    st.API_PORT = port
+    st.BASE_URL = f"http://{st.API_HOST}:{port}"
+    st.TRAINING_TIMEOUT = training_timeout
+    
+    # 修改训练时的 epochs
+    original_create_training_task = st.create_training_task
+    
+    def patched_create_training_task(train_file: str, test_file: str) -> str:
+        """创建训练任务（使用自定义 epochs）"""
+        st.log_info(f"创建 LoRA 训练任务（epochs={epochs}）...")
+        
+        # 注意：测试集没有标签列，不使用单独验证集文件
+        # 使用 train_val_split 从训练集划分验证集
+        payload = {
+            "model_name_cn": "冒烟测试模型",
+            "model_name_en": "smoke_test_model",
+            "training_data_file": train_file,
+            "validation_data_file": None,
+            "base_model": "bert-base-chinese",
+            "hyperparameters": {
+                "learning_rate": 5e-5,
+                "epochs": epochs,
+                "batch_size": 32,
+                "max_sequence_length": 128,
+                "precision": "fp32",
+                "gradient_accumulation_steps": 1,
+                "early_stopping_enabled": False,
+                "early_stopping_patience": 2,
+                "early_stopping_min_delta": 0.001,
+                "early_stopping_metric": "val_accuracy",
+                "random_seed": 42,
+                "train_val_split": 0.2,
+                "text_column": "文本内容",
+                "label_column": "标签列",
+                "sheet_name": None,
+                "validation_sheet_name": None,
+                "lora": {
+                    "enabled": True,
+                    "r": 8,
+                    "lora_alpha": 16,
+                    "lora_dropout": 0.1,
+                    "target_modules": ["query", "value"]
+                }
+            },
+            "callback_url": None
+        }
+        
+        import requests
+        resp = requests.post(
+            f"{st.BASE_URL}/training/tasks",
+            json=payload,
+            timeout=30
+        )
+        resp.raise_for_status()
+        
+        task_id = resp.json()["task_id"]
+        st.log_info(f"训练任务已创建: {task_id}")
+        return task_id
+    
+    st.create_training_task = patched_create_training_task
+    
+    # 运行测试
+    exit_code = smoke_test_main()
+    sys.exit(exit_code)
+
+
 if __name__ == "__main__":
     cli()
