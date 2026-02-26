@@ -9,9 +9,9 @@ from src.logging_utils import configure_logging
 def create_app() -> FastAPI:
     configure_logging()
     app = FastAPI(
-        title="Dianxin Auto Train",
+        title="电信自动训练服务",
         version="1.0.0",
-        description="Automatic model training service",
+        description="用于模型训练与推理管理的自动化服务接口",
     )
     app.include_router(training_router)
     app.include_router(inference_router)

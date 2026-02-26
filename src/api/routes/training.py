@@ -26,7 +26,7 @@ from src.storage import (
 from src.tasks import start_training_task
 
 
-router = APIRouter(prefix="/training/tasks", tags=["training"])
+router = APIRouter(prefix="/training/tasks", tags=["训练任务"])
 
 
 def serialize_progress(progress: dict | None) -> TaskProgress | None:
