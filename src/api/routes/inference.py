@@ -16,7 +16,7 @@ from src.schemas import (
 )
 
 
-router = APIRouter(prefix="/inference", tags=["inference"])
+router = APIRouter(prefix="/inference", tags=["推理服务"])
 
 
 @router.post("/models/load", response_model=LoraModelLoadResponse)
@@ -62,7 +62,13 @@ def predict_lora(payload: LoraPredictRequest) -> LoraPredictResponse:
     return LoraPredictResponse(**result)
 
 
-@router.get("/models", response_model=ModelListResponse)
+@router.get(
+    "/models",
+    response_model=ModelListResponse,
+    summary="获取模型列表",
+    description="获取所有可用模型列表及其加载状态。",
+    response_description="模型列表",
+)
 def list_models() -> ModelListResponse:
     """获取所有可用模型列表及其状态"""
     manager = get_inference_manager()
@@ -72,7 +78,13 @@ def list_models() -> ModelListResponse:
     return ModelListResponse(models=models, total=len(models), loaded_count=loaded_count)
 
 
-@router.post("/models/query", response_model=ModelListResponse)
+@router.post(
+    "/models/query",
+    response_model=ModelListResponse,
+    summary="查询模型",
+    description="根据模型 ID 列表批量查询模型信息。",
+    response_description="查询结果",
+)
 def query_models(payload: ModelQueryRequest) -> ModelListResponse:
     """根据模型ID列表查询模型"""
     if not payload.model_ids:
@@ -84,7 +96,13 @@ def query_models(payload: ModelQueryRequest) -> ModelListResponse:
     return ModelListResponse(models=models, total=len(models), loaded_count=loaded_count)
 
 
-@router.get("/status", response_model=InferenceServiceStatusResponse)
+@router.get(
+    "/status",
+    response_model=InferenceServiceStatusResponse,
+    summary="获取服务状态",
+    description="获取推理服务状态，包括 Worker 状态、显存信息和待处理请求数。",
+    response_description="服务状态详情",
+)
 def get_service_status() -> InferenceServiceStatusResponse:
     """获取推理服务状态，包括Worker和显存信息"""
     manager = get_inference_manager()
