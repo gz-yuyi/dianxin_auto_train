@@ -144,41 +144,41 @@ class LoraPredictResponse(BaseModel):
 
 class ModelInfo(BaseModel):
     """模型信息"""
-    model_id: str
-    status: str = Field(..., description="Model status: loaded/unloaded")
-    gpu_id: int | None = Field(None, description="GPU ID where model is loaded")
-    uptime_seconds: float | None = Field(None, description="Uptime in seconds if loaded")
+    model_id: str = Field(..., description="模型 ID")
+    status: str = Field(..., description="模型状态: loaded/unloaded")
+    gpu_id: int | None = Field(None, description="模型加载的 GPU ID")
+    uptime_seconds: float | None = Field(None, description="模型加载时长（秒）")
 
 
 class ModelListResponse(BaseModel):
     """模型列表响应"""
-    models: list[ModelInfo]
-    total: int
-    loaded_count: int
+    models: list[ModelInfo] = Field(..., description="模型列表")
+    total: int = Field(..., description="模型总数")
+    loaded_count: int = Field(..., description="已加载模型数量")
 
 
 class ModelQueryRequest(BaseModel):
     """模型查询请求"""
-    model_ids: list[str] = Field(..., min_length=1, description="List of model IDs to query")
+    model_ids: list[str] = Field(..., min_length=1, description="要查询的模型 ID 列表")
 
 
 class WorkerStatus(BaseModel):
     """Worker 状态信息"""
-    worker_id: str
-    device: str
-    total_memory_mb: float
-    used_memory_mb: float
-    free_memory_mb: float
-    memory_usage_percent: float
+    worker_id: str = Field(..., description="Worker ID")
+    device: str = Field(..., description="设备类型")
+    total_memory_mb: float = Field(..., description="总显存（MB）")
+    used_memory_mb: float = Field(..., description="已用显存（MB）")
+    free_memory_mb: float = Field(..., description="空闲显存（MB）")
+    memory_usage_percent: float = Field(..., description="显存使用率（%）")
 
 
 class InferenceServiceStatusResponse(BaseModel):
     """推理服务状态响应"""
-    service_status: str = Field(..., description="Service status: running/starting/error")
-    workers: list[WorkerStatus]
-    total_workers: int
-    loaded_models_count: int
-    pending_requests: int
+    service_status: str = Field(..., description="服务状态: running/starting/error")
+    workers: list[WorkerStatus] = Field(..., description="Worker 列表")
+    total_workers: int = Field(..., description="Worker 总数")
+    loaded_models_count: int = Field(..., description="已加载模型数量")
+    pending_requests: int = Field(..., description="待处理请求数")
 
 
 __all__ = [
