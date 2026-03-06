@@ -19,7 +19,13 @@ from src.schemas import (
 router = APIRouter(prefix="/inference", tags=["推理服务"])
 
 
-@router.post("/models/load", response_model=LoraModelLoadResponse)
+@router.post(
+    "/models/load",
+    response_model=LoraModelLoadResponse,
+    summary="加载模型",
+    description="将指定目录下的模型加载到推理服务中，并返回分配后的模型 ID。",
+    response_description="模型加载结果",
+)
 def load_lora_model(payload: LoraModelLoadRequest) -> LoraModelLoadResponse:
     manager = get_inference_manager()
     try:
@@ -33,7 +39,13 @@ def load_lora_model(payload: LoraModelLoadRequest) -> LoraModelLoadResponse:
     return LoraModelLoadResponse(model_id=model_id, status="loaded", message="model loaded")
 
 
-@router.post("/models/unload", response_model=LoraModelUnloadResponse)
+@router.post(
+    "/models/unload",
+    response_model=LoraModelUnloadResponse,
+    summary="卸载模型",
+    description="根据模型 ID 从推理服务中卸载已加载的模型。",
+    response_description="模型卸载结果",
+)
 def unload_lora_model(payload: LoraModelUnloadRequest) -> LoraModelUnloadResponse:
     manager = get_inference_manager()
     try:
@@ -45,7 +57,13 @@ def unload_lora_model(payload: LoraModelUnloadRequest) -> LoraModelUnloadRespons
     return LoraModelUnloadResponse(model_id=payload.model_id, status="unloaded", message="model unloaded")
 
 
-@router.post("/predict", response_model=LoraPredictResponse)
+@router.post(
+    "/predict",
+    response_model=LoraPredictResponse,
+    summary="执行预测",
+    description="使用指定模型对输入文本列表执行批量预测，并返回标签及概率信息。",
+    response_description="预测结果",
+)
 def predict_lora(payload: LoraPredictRequest) -> LoraPredictResponse:
     if not payload.texts:
         raise HTTPException(status_code=400, detail="texts must not be empty")

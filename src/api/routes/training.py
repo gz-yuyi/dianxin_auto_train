@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from src.callbacks import send_external_status_change
 from src.celery_app import celery_app
@@ -62,7 +62,13 @@ def serialize_list_item(record: dict) -> TrainingTaskListItem:
     )
 
 
-@router.post("", response_model=TrainingTaskResponse)
+@router.post(
+    "",
+    response_model=TrainingTaskResponse,
+    summary="创建训练任务",
+    description="提交一个新的模型训练任务，任务会进入队列等待 Worker 处理。",
+    response_description="训练任务提交结果",
+)
 def create_training_task(payload: TrainingTaskCreateRequest) -> TrainingTaskResponse:
     task_id = uuid4().hex
     created_at = iso_now()
@@ -99,19 +105,33 @@ def create_training_task(payload: TrainingTaskCreateRequest) -> TrainingTaskResp
     )
 
 
-@router.get("/{task_id}", response_model=TrainingTaskDetail)
-def get_training_task(task_id: str) -> TrainingTaskDetail:
+@router.get(
+    "/{task_id}",
+    response_model=TrainingTaskDetail,
+    summary="获取训练任务详情",
+    description="根据任务 ID 查询训练任务的详细状态、时间信息和产物信息。",
+    response_description="训练任务详情",
+)
+def get_training_task(
+    task_id: str = Path(..., title="任务 ID", description="要查询的训练任务 ID"),
+) -> TrainingTaskDetail:
     record = load_task_record(task_id)
     if record is None:
         raise HTTPException(status_code=404, detail="任务不存在")
     return serialize_detail(record)
 
 
-@router.get("", response_model=TrainingTaskListResponse)
+@router.get(
+    "",
+    response_model=TrainingTaskListResponse,
+    summary="查询训练任务列表",
+    description="按分页方式查询训练任务列表，支持按任务状态筛选。",
+    response_description="训练任务列表",
+)
 def list_training_tasks(
-    status: str | None = Query(default=None, description="任务状态筛选"),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    status: str | None = Query(default=None, title="任务状态", description="按任务状态筛选"),
+    page: int = Query(default=1, ge=1, title="页码", description="分页页码，从 1 开始"),
+    page_size: int = Query(default=20, ge=1, le=100, title="每页数量", description="每页返回的任务数量"),
 ) -> TrainingTaskListResponse:
     records = list_task_records()
     if status is not None:
@@ -124,8 +144,16 @@ def list_training_tasks(
     return TrainingTaskListResponse(total=total, page=page, page_size=page_size, tasks=tasks)
 
 
-@router.post("/{task_id}/stop", response_model=StopTaskResponse)
-def stop_training_task(task_id: str) -> StopTaskResponse:
+@router.post(
+    "/{task_id}/stop",
+    response_model=StopTaskResponse,
+    summary="停止训练任务",
+    description="停止指定训练任务；如果任务已结束，则返回当前结束状态。",
+    response_description="停止训练任务结果",
+)
+def stop_training_task(
+    task_id: str = Path(..., title="任务 ID", description="要停止的训练任务 ID"),
+) -> StopTaskResponse:
     record = load_task_record(task_id)
     if record is None:
         raise HTTPException(status_code=404, detail="任务不存在")
@@ -140,8 +168,16 @@ def stop_training_task(task_id: str) -> StopTaskResponse:
     return StopTaskResponse(task_id=task_id, status="stopped", message="训练任务已停止")
 
 
-@router.delete("/{task_id}", response_model=DeleteTaskResponse)
-def delete_training_task(task_id: str) -> DeleteTaskResponse:
+@router.delete(
+    "/{task_id}",
+    response_model=DeleteTaskResponse,
+    summary="删除训练任务",
+    description="删除指定训练任务记录；如果任务仍在运行，会先撤销对应的 Celery 任务。",
+    response_description="删除训练任务结果",
+)
+def delete_training_task(
+    task_id: str = Path(..., title="任务 ID", description="要删除的训练任务 ID"),
+) -> DeleteTaskResponse:
     record = load_task_record(task_id)
     if record is None:
         raise HTTPException(status_code=404, detail="任务不存在")
