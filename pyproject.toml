@@ -3,7 +3,7 @@ name = "dianxin-auto-train"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "celery",
     "click",
@@ -19,12 +19,26 @@ dependencies = [
     "redis",
     "requests",
     "scikit-learn",
-    "torch",
+    "torch==2.9.*",
     "tqdm",
     "transformers",
     "uvicorn[standard]",
 ]
 
+[project.optional-dependencies]
+npu = [
+    "torch-npu==2.9.*; sys_platform == 'linux'",
+]
+
+[tool.uv.sources]
+"torch-npu" = { index = "pypi-official", extra = "npu", marker = "sys_platform == 'linux'" }
+
 [[tool.uv.index]]
+name = "aliyun"
 url = "https://mirrors.aliyun.com/pypi/simple/"
 default = true
+
+[[tool.uv.index]]
+name = "pypi-official"
+url = "https://pypi.org/simple"
+explicit = true
