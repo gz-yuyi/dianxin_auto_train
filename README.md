@@ -73,12 +73,13 @@ uv run python main.py train --payload-file payload.json --callback
 1. `cp .env.example .env` 并按需调整；Docker 环境下建议保持 Redis URL 默认值或改为 `redis://redis:6379/...`（compose 已配置）。
 2. 将训练数据放到 `./data`，会挂载到容器内 `/app/data`；模型产物默认在 `./artifacts` 下持久化。
 3. （可选）`.env` 中设置 `DX_IMAGE_TAG` 指定镜像版本，默认 `latest`。
-4. 启动：
+4. 镜像会在构建阶段完成 Python 依赖安装；正常运行时不应再访问 PyPI，适合离线部署。
+5. 启动：
    ```bash
    docker compose up -d
    ```
    若更新 `DX_IMAGE_TAG`，建议执行 `docker compose pull` 拉取最新镜像。
-5. API 地址：http://localhost:8000。可用 `docker compose logs -f api` 或 `docker compose logs -f worker` 查看日志。
+6. API 地址：http://localhost:8000。可用 `docker compose logs -f api` 或 `docker compose logs -f worker` 查看日志。
 
 停止服务：`docker compose down`（加 `-v` 会删除 Redis 数据卷）。
 

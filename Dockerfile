@@ -6,6 +6,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=hardlink \
+    VIRTUAL_ENV="/app/.venv" \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
@@ -32,5 +33,6 @@ RUN mkdir -p artifacts
 
 EXPOSE 8000
 
-ENTRYPOINT ["uv", "run", "python", "main.py"]
+# Run with the prebuilt virtualenv directly so startup stays fully offline.
+ENTRYPOINT ["/app/.venv/bin/python", "main.py"]
 CMD ["api", "--host", "0.0.0.0", "--port", "8000"]
