@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:8.5.1-310p-openeuler24.03-py3.11 AS runtime
+FROM swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:8.5.1-a3-ubuntu22.04-py3.11 AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -9,11 +9,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-RUN yum install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     findutils \
-    && yum clean all
+    && rm -rf /var/lib/apt/lists/*
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && mv /root/.local/bin/uv /usr/local/bin/uv \

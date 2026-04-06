@@ -95,7 +95,7 @@ uv run python main.py train --payload-file payload.json --callback
 
 ### 昇腾 NPU（可选）
 
-- 使用 `Dockerfile.ascend` 构建 Ascend 版本镜像；该镜像基于 `cann:8.5.1-310p-openeuler24.03-py3.11`，并安装 `torch` + `torch_npu` 的 `npu` 依赖集。
+- 使用 `Dockerfile.ascend` 构建 Ascend 版本镜像；该镜像基于 `cann:8.5.1-a3-ubuntu22.04-py3.11`，并安装 `torch` + `torch_npu` 的 `npu` 依赖集。
 - 构建镜像：
   ```bash
   docker build -f Dockerfile.ascend -t ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend} .
@@ -123,7 +123,7 @@ uv run python main.py train --payload-file payload.json --callback
 `crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train`
 
 - `.github/workflows/docker-build-push.yml`：默认 CPU/CUDA 镜像，推送 `latest`、`sha-<git-sha>` 和版本 tag。
-- `.github/workflows/docker-build-push-npu.yml`：昇腾 NPU 镜像，使用 `Dockerfile.ascend` 构建，推送 `linux/amd64 + linux/arm64` 多架构镜像，tag 为 `npu` 和 `<tag>-npu`。
+- `.github/workflows/docker-build-push-npu.yml`：昇腾 NPU 镜像，使用 `Dockerfile.ascend` 构建，只推送 `linux/arm64` 镜像，tag 为 `npu` 和 `<tag>-npu`。
 
 需要在仓库 secrets 中配置 `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`。CPU/CUDA workflow 会推送 `latest`、`sha-<git-sha>` 和 tag 版本；NPU workflow 会推送 `npu` 和 `tag-npu` 版本。
 
