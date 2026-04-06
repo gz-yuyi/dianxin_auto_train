@@ -25,6 +25,12 @@ from src.config import (
     get_inference_workers_per_gpu,
     get_model_output_dir,
 )
+from src.device_utils import (
+    empty_cache,
+    get_available_accelerator_devices,
+    get_device_memory_info,
+    set_current_device,
+)
 
 # Global lock for model loading to prevent meta tensor issues with multiple GPUs
 _MODEL_LOAD_LOCK = threading.Lock()
@@ -191,8 +197,8 @@ class InferenceWorker:
         # 使用全局锁确保只有一个 Worker 同时加载模型
         # 这是为了避免多 GPU 环境下出现 meta tensor 错误
         with _MODEL_LOAD_LOCK:
-            if self.device.type == "cuda":
-                torch.cuda.set_device(self.device)
+            if self.device.type != "cpu":
+                set_current_device(self.device)
             
             # 加载基础模型到 CPU，然后转移到目标设备
             self._base_model = AutoModel.from_pretrained(self.base_model_name)
@@ -325,8 +331,7 @@ class InferenceWorker:
             return
         if hasattr(self._peft_model, "delete_adapter"):
             self._peft_model.delete_adapter(adapter_name)
-        if self.device.type == "cuda":
-            torch.cuda.empty_cache()
+        empty_cache(self.device)
 
 
 class LoraInferenceManager:
@@ -471,7 +476,7 @@ class LoraInferenceManager:
                         # 获取 GPU ID（从任意一个 worker 获取）
                         gpu_id = None
                         if self.workers:
-                            gpu_id = self.workers[0].device.index if self.workers[0].device.type == "cuda" else None
+                            gpu_id = self.workers[0].device.index if self.workers[0].device.type != "cpu" else None
                         models.append({
                             "model_id": model_id,
                             "status": "loaded",
@@ -513,23 +518,11 @@ class LoraInferenceManager:
                 "memory_usage_percent": 0.0
             }
             
-            if device.type == "cuda" and torch.cuda.is_available():
-                try:
-                    total_memory = torch.cuda.get_device_properties(device).total_memory
-                    reserved = torch.cuda.memory_reserved(device)
-                    allocated = torch.cuda.memory_allocated(device)
-                    free = total_memory - reserved
-                    
-                    total_mb = total_memory / 1024 / 1024
-                    used_mb = allocated / 1024 / 1024
-                    free_mb = free / 1024 / 1024
-                    
-                    worker_status["total_memory_mb"] = round(total_mb, 2)
-                    worker_status["used_memory_mb"] = round(used_mb, 2)
-                    worker_status["free_memory_mb"] = round(free_mb, 2)
-                    worker_status["memory_usage_percent"] = round((used_mb / total_mb) * 100, 2) if total_mb > 0 else 0.0
-                except Exception:
-                    pass
+            total_mb, used_mb, free_mb, usage_percent = get_device_memory_info(device)
+            worker_status["total_memory_mb"] = total_mb
+            worker_status["used_memory_mb"] = used_mb
+            worker_status["free_memory_mb"] = free_mb
+            worker_status["memory_usage_percent"] = usage_percent
             
             workers_status.append(worker_status)
         
@@ -549,9 +542,7 @@ class LoraInferenceManager:
         }
 
     def _available_devices(self) -> list[torch.device]:
-        if torch.cuda.is_available():
-            return [torch.device(f"cuda:{idx}") for idx in range(torch.cuda.device_count())]
-        return []
+        return get_available_accelerator_devices()
 
     def _select_adapter_locked(self) -> str | None:
         now = time.time()

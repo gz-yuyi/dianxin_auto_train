@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+from src.device_utils import get_visible_devices
+
 
 load_dotenv()
 
@@ -132,13 +134,7 @@ def get_inference_unload_timeout() -> float:
 
 
 def parse_visible_gpu_devices() -> list[str]:
-    raw = env_str("GPU_VISIBLE_DEVICES")
-    if raw is None:
-        raw = env_str("CUDA_VISIBLE_DEVICES")
-    if raw is None:
-        return []
-    devices = [device.strip() for device in raw.split(",")]
-    return [device for device in devices if device]
+    return get_visible_devices()
 
 
 def get_worker_max_concurrency() -> int:

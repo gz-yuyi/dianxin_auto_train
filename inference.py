@@ -10,6 +10,8 @@ from torch import nn
 from peft import PeftModel
 from transformers import AutoModel, AutoTokenizer
 
+from src.device_utils import resolve_device, set_current_device
+
 
 class TextClassifier(nn.Module):
     """Text classifier with pooled encoder output."""
@@ -36,11 +38,10 @@ class TextClassifier(nn.Module):
 
 
 def pick_device(device_str: str) -> torch.device:
-    if device_str != "auto":
-        return torch.device(device_str)
-    if torch.cuda.is_available():
-        return torch.device("cuda:0")
-    return torch.device("cpu")
+    device = resolve_device(device_str)
+    if device.type != "cpu":
+        set_current_device(device)
+    return device
 
 
 def load_label_mapping(path: Path) -> tuple[dict[str, int], dict[int, str]]:
@@ -79,11 +80,11 @@ def load_model(
         base = AutoModel.from_pretrained(base_model)
         bert = PeftModel.from_pretrained(base, resolved_adapter_path)
         model = TextClassifier(base_model, out_features=num_labels, base_model_instance=bert)
-        head_state = torch.load(model_path, map_location=device)
+        head_state = torch.load(model_path, map_location="cpu")
         model.linear.load_state_dict(head_state)
     else:
         model = TextClassifier(base_model, out_features=num_labels)
-        state_dict = torch.load(model_path, map_location=device)
+        state_dict = torch.load(model_path, map_location="cpu")
         model.load_state_dict(state_dict)
     model.to(device)
     model.eval()
@@ -191,7 +192,7 @@ def cli() -> None:
 )
 @click.option("--top-n", default=3, show_default=True, type=int, help="返回前 N 个标签")
 @click.option(
-    "--device", default="auto", show_default=True, help="推理设备，如 auto/cpu/cuda:0"
+    "--device", default="auto", show_default=True, help="推理设备，如 auto/cpu/cuda:0/npu:0"
 )
 @click.option(
     "--batch-size", default=16, show_default=True, type=int, help="推理批大小"
@@ -305,7 +306,7 @@ def multi_class(
     help="前 K 标签中的概率阈值",
 )
 @click.option(
-    "--device", default="auto", show_default=True, help="推理设备，如 auto/cpu/cuda:0"
+    "--device", default="auto", show_default=True, help="推理设备，如 auto/cpu/cuda:0/npu:0"
 )
 @click.option(
     "--batch-size", default=16, show_default=True, type=int, help="推理批大小"
@@ -429,7 +430,7 @@ def single_judge(
     help="前 K 标签中的概率阈值",
 )
 @click.option(
-    "--device", default="auto", show_default=True, help="推理设备，如 auto/cpu/cuda:0"
+    "--device", default="auto", show_default=True, help="推理设备，如 auto/cpu/cuda:0/npu:0"
 )
 @click.option(
     "--batch-size", default=16, show_default=True, type=int, help="推理批大小"

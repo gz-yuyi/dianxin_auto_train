@@ -1,4 +1,3 @@
-import contextlib
 import os
 import pickle
 from pathlib import Path
@@ -17,6 +16,16 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import AutoModel, AutoTokenizer
 
 from src.config import get_data_root, get_model_output_dir
+from src.device_utils import (
+    autocast_context,
+    create_grad_scaler,
+    device_supports_precision,
+    enable_deterministic_mode,
+    get_auto_device,
+    manual_seed_all,
+    set_current_device,
+    visible_device_env_var,
+)
 
 
 class TextClassificationDataset(Dataset):
@@ -115,25 +124,31 @@ def count_trainable_parameters(model: nn.Module) -> tuple[int, int]:
 
 
 def setup_seed(seed: int) -> None:
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    manual_seed_all(seed)
     np.random.seed(seed)
     import random
 
     random.seed(seed)
-    torch.backends.cudnn.deterministic = True
+    enable_deterministic_mode()
 
 
 def select_device(task_id: str) -> torch.device:
-    if torch.cuda.is_available():
-        visible = os.getenv("CUDA_VISIBLE_DEVICES")
+    del task_id
+    device = get_auto_device()
+    if device.type != "cpu":
+        visible = (
+            os.getenv("CUDA_VISIBLE_DEVICES")
+            or os.getenv("ASCEND_RT_VISIBLE_DEVICES")
+            or os.getenv("GPU_VISIBLE_DEVICES")
+        )
         if visible:
-            # When CUDA_VISIBLE_DEVICES is set per-process we always use local index 0
-            torch.cuda.set_device(0)
-            return torch.device("cuda:0")
-        torch.cuda.set_device(0)
-        return torch.device("cuda:0")
-    return torch.device("cpu")
+            # When a single visible device is configured per-process we always use local index 0.
+            env_name = visible_device_env_var(device.type)
+            if env_name and os.getenv(env_name) is None:
+                os.environ[env_name] = visible
+            device = torch.device(f"{device.type}:0")
+        set_current_device(device)
+    return device
 
 
 def prepare_dataframe(
@@ -275,8 +290,8 @@ def run_training_loop(
     precision = str(hp.get("precision", "fp32")).lower()
     if precision not in {"fp32", "fp16", "bf16"}:
         raise ValueError(f"Unsupported precision '{precision}', expected fp32, fp16, or bf16.")
-    if device.type != "cuda" and precision != "fp32":
-        logger.warning("Precision {} requested but CUDA unavailable; falling back to fp32.", precision)
+    if not device_supports_precision(device, precision):
+        logger.warning("Precision {} requested but {} does not support it; falling back to fp32.", precision, device)
         precision = "fp32"
 
     if precision == "fp16":
@@ -315,14 +330,9 @@ def run_training_loop(
     if grad_accum_steps < 1:
         raise ValueError("gradient_accumulation_steps must be >= 1.")
 
-    use_amp = device.type == "cuda" and precision in {"fp16", "bf16"}
+    use_amp = precision in {"fp16", "bf16"} and device_supports_precision(device, precision)
     amp_dtype = torch_dtype if use_amp else None
-    scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda" and precision == "fp16")
-
-    def autocast_context():
-        if not use_amp:
-            return contextlib.nullcontext()
-        return torch.cuda.amp.autocast(dtype=amp_dtype)
+    scaler = create_grad_scaler(device, precision if use_amp else "fp32")
 
     best_val_accuracy = 0.0
     best_model_metric: float | None = None
@@ -373,7 +383,7 @@ def run_training_loop(
             input_ids = inputs["input_ids"].squeeze(1).to(device)
             attention_mask = inputs["attention_mask"].squeeze(1).to(device)
             labels = labels.to(device)
-            with autocast_context():
+            with autocast_context(device, precision if use_amp else "fp32", amp_dtype):
                 outputs = model(input_ids, attention_mask)
                 loss = criterion(outputs, labels)
             loss_value = loss.item()
@@ -427,7 +437,7 @@ def run_training_loop(
                 input_ids = inputs["input_ids"].squeeze(1).to(device)
                 attention_mask = inputs["attention_mask"].squeeze(1).to(device)
                 labels = labels.to(device)
-                with autocast_context():
+                with autocast_context(device, precision if use_amp else "fp32", amp_dtype):
                     outputs = model(input_ids, attention_mask)
                     loss = criterion(outputs, labels)
                 predictions = outputs.argmax(dim=1)

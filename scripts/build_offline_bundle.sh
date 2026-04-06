@@ -75,6 +75,7 @@ mkdir -p "$TARGET_DIR"/{images,models,data,artifacts}
 
 cp "$REPO_ROOT/docker-compose.yml" "$TARGET_DIR/docker-compose.yml"
 cp "$REPO_ROOT/docker-compose.gpu.yml" "$TARGET_DIR/docker-compose.gpu.yml"
+cp "$REPO_ROOT/docker-compose.npu.yml" "$TARGET_DIR/docker-compose.npu.yml"
 cp "$REPO_ROOT/.env.offline.example" "$TARGET_DIR/.env.example"
 
 IMAGE_LIST=("$APP_IMAGE" "$REDIS_IMAGE")
@@ -116,6 +117,7 @@ Model directory name: ${MODEL_DIR_NAME}
 Contents:
 - docker-compose.yml
 - docker-compose.gpu.yml (optional NVIDIA override)
+- docker-compose.npu.yml (optional Ascend override)
 - .env.example
 - images/ (docker save archives)
 - models/${MODEL_DIR_NAME} (pre-downloaded model)

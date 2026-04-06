@@ -32,7 +32,7 @@ uv run python main.py api --host 0.0.0.0 --port 8000
 uv run python main.py check-service --host 127.0.0.1 --port 8000
 ```
 
-Worker 会根据 `GPU_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES` 自动设置并发；未设置时回退到单 CPU worker。每个 worker 进程绑定单张 GPU，保证单卡只跑一个训练任务。
+Worker 会根据 `GPU_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES` / `ASCEND_RT_VISIBLE_DEVICES` 自动设置并发；未设置时回退到单 CPU worker。每个 worker 进程绑定单张加速卡，保证单卡只跑一个训练任务。
 
 ### 本地训练（CLI）
 无需 API 或 Celery worker，可直接使用 `train` 子命令进行本地训练；Payload 与 API 一致，默认不发送回调。
@@ -93,6 +93,20 @@ uv run python main.py train --payload-file payload.json --callback
   ```
   若无 GPU，可不加覆盖文件，镜像会自动回退到 CPU。
 
+### 昇腾 NPU（可选）
+
+- 使用 `Dockerfile.ascend` 构建 Ascend 版本镜像；该镜像基于 `cann:8.5.1-310p-openeuler24.03-py3.11`，并安装 `torch` + `torch_npu` 的 `npu` 依赖集。
+- 构建镜像：
+  ```bash
+  docker build -f Dockerfile.ascend -t ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend} .
+  ```
+- 复制 `.env.example` 为 `.env`，设置 `ASCEND_RT_VISIBLE_DEVICES` 控制容器可见 NPU。
+- 使用 NPU 覆盖文件启动：
+  ```bash
+  docker compose -f docker-compose.yml -f docker-compose.npu.yml up -d
+  ```
+- CLI / 推理 `--device` 现在支持 `auto`、`cpu`、`cuda:0`、`npu:0`。
+
 ### 离线部署
 
 无外网环境可在在线机器生成离线包：
@@ -105,10 +119,13 @@ uv run python main.py train --payload-file payload.json --callback
 
 ### 自动镜像发布
 
-仓库内 ` .github/workflows/docker-build-push.yml` 会在 `main` 分支、任意 `v*` tag、或手动触发时构建并推送镜像到：
+仓库内会通过两条 workflow 在 `main` 分支、任意 `v*` tag、或手动触发时构建并推送镜像到：
 `crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train`
 
-需要在仓库 secrets 中配置 `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`。每次构建会推送 `latest`、`sha-<git-sha>` 以及 tag 对应版本。
+- `.github/workflows/docker-build-push.yml`：默认 CPU/CUDA 镜像，推送 `latest`、`sha-<git-sha>` 和版本 tag。
+- `.github/workflows/docker-build-push-npu.yml`：昇腾 NPU 镜像，使用 `Dockerfile.ascend` 构建，推送 `linux/amd64 + linux/arm64` 多架构镜像，tag 为 `npu` 和 `<tag>-npu`。
+
+需要在仓库 secrets 中配置 `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`。CPU/CUDA workflow 会推送 `latest`、`sha-<git-sha>` 和 tag 版本；NPU workflow 会推送 `npu` 和 `tag-npu` 版本。
 
 ### API
 服务 API 位于 `/api/v1/training/tasks`：
@@ -162,4 +179,4 @@ uv run python main.py train --payload-file payload.json --callback
     --top-k 2 --threshold 0.4
   ```
 
-所有命令都支持 `--sheet` 指定 Excel sheet，`--output` 设置输出文件名，`--device` 强制使用 `cpu` / `cuda:0`。默认 `max_length=512`、`base-model=bert-base-chinese`，可按训练配置调整。
+所有命令都支持 `--sheet` 指定 Excel sheet，`--output` 设置输出文件名，`--device` 强制使用 `cpu` / `cuda:0` / `npu:0`。默认 `max_length=512`、`base-model=bert-base-chinese`，可按训练配置调整。

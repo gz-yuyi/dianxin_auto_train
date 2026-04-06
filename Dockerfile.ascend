@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1
+FROM swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:8.5.1-310p-openeuler24.03-py3.11 AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_LINK_MODE=hardlink \
+    VIRTUAL_ENV="/app/.venv" \
+    PATH="/app/.venv/bin:$PATH"
+
+WORKDIR /app
+
+RUN yum install -y \
+    curl \
+    git \
+    findutils \
+    && yum clean all
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && mv /root/.local/bin/uv /usr/local/bin/uv \
+    && rm -rf /root/.local
+
+COPY pyproject.toml uv.lock .python-version ./
+
+RUN uv sync --frozen --no-dev --extra npu
+
+COPY . .
+
+RUN mkdir -p artifacts \
+    && chmod +x /app/docker/entrypoint.ascend.sh
+
+EXPOSE 8000
+
+ENTRYPOINT ["/app/docker/entrypoint.ascend.sh"]
+CMD ["api", "--host", "0.0.0.0", "--port", "8000"]

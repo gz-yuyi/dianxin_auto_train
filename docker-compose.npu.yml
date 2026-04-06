@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  api:
+    image: ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend}
+    environment:
+      ASCEND_RT_VISIBLE_DEVICES: ${ASCEND_RT_VISIBLE_DEVICES:-0}
+
+  worker:
+    image: ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend}
+    environment:
+      ASCEND_RT_VISIBLE_DEVICES: ${ASCEND_RT_VISIBLE_DEVICES:-0}

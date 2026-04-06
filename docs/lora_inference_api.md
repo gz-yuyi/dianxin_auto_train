@@ -220,16 +220,16 @@
     "service_status": "running",
     "workers": [
         {
-            "worker_id": "cuda0-0",
-            "device": "cuda:0",
+            "worker_id": "npu0-0",
+            "device": "npu:0",
             "total_memory_mb": 24576,
             "used_memory_mb": 8192,
             "free_memory_mb": 16384,
             "memory_usage_percent": 33.3
         },
         {
-            "worker_id": "cuda1-0",
-            "device": "cuda:1",
+            "worker_id": "npu1-0",
+            "device": "npu:1",
             "total_memory_mb": 24576,
             "used_memory_mb": 4096,
             "free_memory_mb": 20480,
