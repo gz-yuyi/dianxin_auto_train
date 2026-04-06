@@ -98,7 +98,7 @@ uv run python main.py train --payload-file payload.json --callback
 - 使用 `Dockerfile.ascend` 构建 Ascend 版本镜像；该镜像基于 `cann:8.5.1-a3-ubuntu22.04-py3.11`，并安装 `torch` + `torch_npu` 的 `npu` 依赖集。
 - 构建镜像：
   ```bash
-  docker build -f Dockerfile.ascend -t ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend} .
+  docker build -f Dockerfile.ascend -t ${DX_ASCEND_IMAGE_NAME:-crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train:npu} .
   ```
 - 复制 `.env.example` 为 `.env`，设置 `ASCEND_RT_VISIBLE_DEVICES` 控制容器可见 NPU。
 - 使用 NPU 覆盖文件启动：
