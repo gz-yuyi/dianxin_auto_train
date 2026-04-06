@@ -3,10 +3,20 @@ version: "3.9"
 services:
   api:
     image: ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend}
+    privileged: true
+    shm_size: ${DX_ASCEND_SHM_SIZE:-20g}
     environment:
       ASCEND_RT_VISIBLE_DEVICES: ${ASCEND_RT_VISIBLE_DEVICES:-0}
+    volumes:
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin:/usr/local/sbin:ro
 
   worker:
     image: ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend}
+    privileged: true
+    shm_size: ${DX_ASCEND_SHM_SIZE:-20g}
     environment:
       ASCEND_RT_VISIBLE_DEVICES: ${ASCEND_RT_VISIBLE_DEVICES:-0}
+    volumes:
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin:/usr/local/sbin:ro

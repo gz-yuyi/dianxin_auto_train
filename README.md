@@ -105,6 +105,7 @@ uv run python main.py train --payload-file payload.json --callback
   ```bash
   docker compose -f docker-compose.yml -f docker-compose.npu.yml up -d
   ```
+- `docker-compose.npu.yml` 已内置昇腾容器运行参数：`privileged: true`、`shm_size: ${DX_ASCEND_SHM_SIZE:-20g}`，并挂载 `/usr/local/Ascend/driver` 与 `/usr/local/sbin` 只读目录。
 - CLI / 推理 `--device` 现在支持 `auto`、`cpu`、`cuda:0`、`npu:0`。
 
 ### 离线部署
