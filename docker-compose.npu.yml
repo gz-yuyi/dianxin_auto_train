@@ -7,9 +7,18 @@ services:
     shm_size: ${DX_ASCEND_SHM_SIZE:-20g}
     environment:
       ASCEND_RT_VISIBLE_DEVICES: ${ASCEND_RT_VISIBLE_DEVICES:-0}
+    devices:
+      - /dev/davinci0:/dev/davinci0
+      - /dev/davinci_manager:/dev/davinci_manager
+      - /dev/hisi_hdc:/dev/hisi_hdc
+      - /dev/svm0:/dev/svm0
+      - /dev/ascend_manager:/dev/ascend_manager
     volumes:
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
       - /usr/local/sbin:/usr/local/sbin:ro
+      - /etc/hdcBasic.cfg:/etc/hdcBasic.cfg:ro
+      - /var/slogd:/var/slogd:ro
+      - /var/dmp_daemon:/var/dmp_daemon:ro
 
   worker:
     image: ${DX_ASCEND_IMAGE_NAME:-crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train:npu}
@@ -17,6 +26,15 @@ services:
     shm_size: ${DX_ASCEND_SHM_SIZE:-20g}
     environment:
       ASCEND_RT_VISIBLE_DEVICES: ${ASCEND_RT_VISIBLE_DEVICES:-0}
+    devices:
+      - /dev/davinci0:/dev/davinci0
+      - /dev/davinci_manager:/dev/davinci_manager
+      - /dev/hisi_hdc:/dev/hisi_hdc
+      - /dev/svm0:/dev/svm0
+      - /dev/ascend_manager:/dev/ascend_manager
     volumes:
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
       - /usr/local/sbin:/usr/local/sbin:ro
+      - /etc/hdcBasic.cfg:/etc/hdcBasic.cfg:ro
+      - /var/slogd:/var/slogd:ro
+      - /var/dmp_daemon:/var/dmp_daemon:ro

@@ -25,7 +25,8 @@ RUN uv sync --frozen --no-dev --extra npu
 
 COPY . .
 
-RUN mkdir -p artifacts \
+RUN mkdir -p artifacts /home/HwHiAiUser/hdc_ppc \
+    && chmod -R 777 /home/HwHiAiUser \
     && chmod +x /app/docker/entrypoint.ascend.sh
 
 EXPOSE 8000
