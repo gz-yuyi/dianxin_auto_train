@@ -24,8 +24,8 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 
 COPY pyproject.toml uv.lock .python-version ./
 
-# Use hardlinks when populating the venv to avoid doubling disk usage during installs
-RUN uv sync --frozen --no-dev
+# Use hardlinks when populating the venv to avoid doubling disk usage during installs.
+RUN uv sync --frozen --no-dev --extra runtime
 
 COPY . .
 

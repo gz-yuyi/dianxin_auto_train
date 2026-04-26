@@ -7,6 +7,15 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      target-sdk:
+        description: Ascend SDK target to build
+        required: false
+        type: choice
+        default: cann81-910b
+        options:
+          - cann81-910b
+          - cann85-a3
 
 env:
   REGISTRY: crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com
@@ -36,14 +45,44 @@ jobs:
           username: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
           password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
+      - name: Resolve target SDK
+        id: target
+        shell: bash
+        env:
+          TARGET_SDK_INPUT: ${{ github.event.inputs['target-sdk'] || 'cann81-910b' }}
+        run: |
+          set -euo pipefail
+
+          case "${TARGET_SDK_INPUT}" in
+            cann81-910b)
+              base_image="swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:8.1.rc1-910b-ubuntu22.04-py3.10"
+              uv_extra="npu-cann81-910b"
+              ;;
+            cann85-a3)
+              base_image="swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:8.5.1-a3-ubuntu22.04-py3.11"
+              uv_extra="npu-cann85-a3"
+              ;;
+            *)
+              echo "Unsupported target-sdk: ${TARGET_SDK_INPUT}" >&2
+              exit 1
+              ;;
+          esac
+
+          {
+            echo "target_sdk=${TARGET_SDK_INPUT}"
+            echo "base_image=${base_image}"
+            echo "uv_extra=${uv_extra}"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=npu,enable={{is_default_branch}}
-            type=ref,event=tag,suffix=-npu
+            type=raw,value=npu-${{ steps.target.outputs.target_sdk }},enable={{is_default_branch}}
+            type=raw,value=npu,enable=${{ steps.target.outputs.target_sdk == 'cann81-910b' && github.ref == 'refs/heads/main' }}
+            type=ref,event=tag,suffix=-npu-${{ steps.target.outputs.target_sdk }}
 
       - name: Build and push NPU image
         uses: docker/build-push-action@v6
@@ -54,3 +93,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            ASCEND_BASE_IMAGE=${{ steps.target.outputs.base_image }}
+            TARGET_SDK=${{ steps.target.outputs.target_sdk }}
+            UV_EXTRA=${{ steps.target.outputs.uv_extra }}

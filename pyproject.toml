@@ -15,25 +15,48 @@ dependencies = [
     "numpy",
     "openpyxl>=3.1.5",
     "pandas",
-    "peft",
     "protobuf",
     "python-dotenv",
     "redis",
     "requests",
     "scikit-learn",
-    "torch==2.9.*",
     "tqdm",
-    "transformers",
     "uvicorn[standard]",
 ]
 
 [project.optional-dependencies]
-npu = [
+runtime = [
+    "peft==0.18.1",
+    "torch==2.9.*",
+    "transformers==4.57.1",
+]
+npu-cann81-910b = [
+    "peft==0.13.2",
+    "torch==2.5.1",
+    "torch-npu==2.5.1; sys_platform == 'linux' and python_version < '3.12'",
+    "transformers==4.41.2",
+]
+npu-cann85-a3 = [
+    "peft==0.18.1",
+    "torch==2.9.*",
     "torch-npu==2.9.*; sys_platform == 'linux'",
+    "transformers==4.57.1",
+]
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "runtime" },
+        { extra = "npu-cann81-910b" },
+        { extra = "npu-cann85-a3" },
+    ],
 ]
 
 [tool.uv.sources]
-"torch-npu" = { index = "pypi-official", extra = "npu", marker = "sys_platform == 'linux'" }
+"torch-npu" = [
+    { index = "pypi-official", extra = "npu-cann81-910b", marker = "sys_platform == 'linux'" },
+    { index = "pypi-official", extra = "npu-cann85-a3", marker = "sys_platform == 'linux'" },
+]
 
 [[tool.uv.index]]
 name = "aliyun"

@@ -3,17 +3,17 @@
 基于 BERT + Celery 的文本分类自动微调流水线。
 
 ### 环境要求
-- Python 3.12+
+- Python 3.10-3.12
 - Redis（Celery broker/result backend）
 - GPU 可选；未提供时自动回退到 CPU 训练
 
 ### 安装
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh  # 如需安装 uv
-uv sync
+uv sync --extra runtime
 cp .env.example .env
 ```
-按需修改 `.env` 中的 Redis、数据路径、回调地址和输出目录等配置。`uv` 管理的虚拟环境位于 `.venv`。
+按需修改 `.env` 中的 Redis、数据路径、回调地址和输出目录等配置。`uv` 管理的虚拟环境位于 `.venv`。Ascend NPU 镜像会按目标 SDK 使用对应的 NPU extra。
 
 ### 启动服务
 先启动 Redis，然后在两个终端分别执行：
@@ -95,10 +95,18 @@ uv run python main.py train --payload-file payload.json --callback
 
 ### 昇腾 NPU（可选）
 
-- 使用 `Dockerfile.ascend` 构建 Ascend 版本镜像；该镜像基于 `cann:8.5.1-a3-ubuntu22.04-py3.11`，并安装 `torch` + `torch_npu` 的 `npu` 依赖集。
+- 使用 `Dockerfile.ascend` 构建 Ascend 版本镜像；基础镜像和 `uv` extra 可通过 `ASCEND_BASE_IMAGE` / `UV_EXTRA` 参数选择。默认目标为 `cann81-910b`，使用 `npu-cann81-910b` 依赖集。
 - 构建镜像：
   ```bash
   docker build -f Dockerfile.ascend -t ${DX_ASCEND_IMAGE_NAME:-crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train:npu} .
+  ```
+- 构建其他目标 SDK：
+  ```bash
+  docker build -f Dockerfile.ascend \
+    --build-arg ASCEND_BASE_IMAGE=swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:8.5.1-a3-ubuntu22.04-py3.11 \
+    --build-arg TARGET_SDK=cann85-a3 \
+    --build-arg UV_EXTRA=npu-cann85-a3 \
+    -t ${DX_ASCEND_IMAGE_NAME:-crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train:npu-cann85-a3} .
   ```
 - 复制 `.env.example` 为 `.env`，设置 `ASCEND_RT_VISIBLE_DEVICES` 控制容器可见 NPU。
 - 使用 NPU 覆盖文件启动：

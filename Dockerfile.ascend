@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1
-FROM swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:8.5.1-a3-ubuntu22.04-py3.11 AS runtime
+ARG ASCEND_BASE_IMAGE=swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:8.1.rc1-910b-ubuntu22.04-py3.10
+FROM ${ASCEND_BASE_IMAGE} AS runtime
+
+ARG TARGET_SDK=cann81-910b
+ARG UV_EXTRA=npu-cann81-910b
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -19,9 +23,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && mv /root/.local/bin/uv /usr/local/bin/uv \
     && rm -rf /root/.local
 
-COPY pyproject.toml uv.lock .python-version ./
+COPY pyproject.toml uv.lock ./
 
-RUN uv sync --frozen --no-dev --extra npu
+RUN uv sync --frozen --no-dev --python "$(command -v python3 || command -v python)" --extra "${UV_EXTRA}"
 
 COPY . .
 
