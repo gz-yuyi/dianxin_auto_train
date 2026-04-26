@@ -1,7 +1,10 @@
 import contextlib
+import hashlib
 import inspect
+import json
 import pickle
 import queue
+import tempfile
 import threading
 import time
 from collections import deque
@@ -13,7 +16,7 @@ from typing import Callable
 import torch
 import torch.nn.functional as F
 from loguru import logger
-from peft import PeftModel
+from peft import LoraConfig, PeftModel
 from torch import nn
 from transformers import AutoModel, AutoTokenizer
 
@@ -34,6 +37,76 @@ from src.device_utils import (
 
 # Global lock for model loading to prevent meta tensor issues with multiple GPUs
 _MODEL_LOAD_LOCK = threading.Lock()
+
+_PEFT_CONFIG_FILENAME = "adapter_config.json"
+_PEFT_METADATA_KEYS = {"peft_version"}
+_PEFT_COMPAT_ROOT = Path(tempfile.gettempdir()) / "dianxin_auto_train_peft_compat"
+
+
+def _is_noop_unsupported_peft_config(key: str, value: object, raw_config: dict) -> bool:
+    if key in _PEFT_METADATA_KEYS:
+        return True
+    if value is None or value is False or value == {} or value == []:
+        return True
+    # PEFT 0.18 writes the default QaLoRA group size even when QaLoRA is disabled.
+    if key == "qalora_group_size" and not raw_config.get("use_qalora", False):
+        return True
+    return False
+
+
+def _resolve_peft_adapter_path(adapter_path: Path) -> Path:
+    """Return a PEFT-compatible adapter path without mutating trained artifacts.
+
+    Newer PEFT versions persist no-op config keys that older runtime builds cannot
+    parse. When all unsupported keys are no-ops, create a temp adapter directory
+    with a sanitized config and symlinks to the original adapter weights.
+    """
+    config_path = adapter_path / _PEFT_CONFIG_FILENAME
+    if not config_path.exists():
+        return adapter_path
+
+    raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    supported_keys = set(inspect.signature(LoraConfig).parameters)
+    unsupported = {key: value for key, value in raw_config.items() if key not in supported_keys}
+    if not unsupported:
+        return adapter_path
+
+    unsafe = {
+        key: value
+        for key, value in unsupported.items()
+        if not _is_noop_unsupported_peft_config(key, value, raw_config)
+    }
+    if unsafe:
+        raise ValueError(
+            f"Adapter config contains unsupported active PEFT options in {config_path}: {sorted(unsafe)}"
+        )
+
+    sanitized_config = {key: value for key, value in raw_config.items() if key in supported_keys}
+    digest = hashlib.sha256(
+        str(adapter_path.resolve()).encode("utf-8") + b"\0" + config_path.read_bytes()
+    ).hexdigest()[:16]
+    compat_path = _PEFT_COMPAT_ROOT / digest
+    compat_path.mkdir(parents=True, exist_ok=True)
+
+    sanitized_path = compat_path / _PEFT_CONFIG_FILENAME
+    sanitized_text = json.dumps(sanitized_config, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    if not sanitized_path.exists() or sanitized_path.read_text(encoding="utf-8") != sanitized_text:
+        sanitized_path.write_text(sanitized_text, encoding="utf-8")
+
+    for source in adapter_path.iterdir():
+        if source.name == _PEFT_CONFIG_FILENAME:
+            continue
+        target = compat_path / source.name
+        if target.exists() or target.is_symlink():
+            continue
+        target.symlink_to(source)
+
+    logger.warning(
+        "Using sanitized PEFT config for {} after ignoring no-op unsupported keys: {}",
+        adapter_path,
+        sorted(unsupported),
+    )
+    return compat_path
 
 
 class InferenceRequest:
@@ -246,17 +319,18 @@ class InferenceWorker:
     def _load_first_adapter(self, adapter_id: str, adapter_path: Path) -> None:
         if self._base_model is None:
             raise RuntimeError("Base model not initialized")
+        peft_adapter_path = _resolve_peft_adapter_path(adapter_path)
         signature = inspect.signature(PeftModel.from_pretrained)
         if "adapter_name" in signature.parameters:
             self._peft_model = PeftModel.from_pretrained(
-                self._base_model, adapter_path, adapter_name=adapter_id, is_trainable=False
+                self._base_model, peft_adapter_path, adapter_name=adapter_id, is_trainable=False
             ).to(self.device)
             adapter_name = adapter_id
         else:
-            self._peft_model = PeftModel.from_pretrained(self._base_model, adapter_path).to(self.device)
+            self._peft_model = PeftModel.from_pretrained(self._base_model, peft_adapter_path).to(self.device)
             adapter_name = getattr(self._peft_model, "active_adapter", "default")
             if adapter_name != adapter_id and hasattr(self._peft_model, "load_adapter"):
-                self._peft_model.load_adapter(adapter_path, adapter_name=adapter_id, is_trainable=False)
+                self._peft_model.load_adapter(peft_adapter_path, adapter_name=adapter_id, is_trainable=False)
                 adapter_name = adapter_id
         self._peft_model.eval()
         self._adapter_name_map[adapter_id] = adapter_name
@@ -266,7 +340,8 @@ class InferenceWorker:
             raise RuntimeError("PEFT model not initialized")
         if not hasattr(self._peft_model, "load_adapter"):
             raise RuntimeError("Current PEFT version does not support loading multiple adapters")
-        self._peft_model.load_adapter(adapter_path, adapter_name=adapter_id, is_trainable=False)
+        peft_adapter_path = _resolve_peft_adapter_path(adapter_path)
+        self._peft_model.load_adapter(peft_adapter_path, adapter_name=adapter_id, is_trainable=False)
         self._adapter_name_map[adapter_id] = adapter_id
 
     def _load_head(self, head_path: Path, num_labels: int) -> nn.Linear:
