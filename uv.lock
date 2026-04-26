@@ -17,13 +17,14 @@ name = "accelerate"
 version = "1.12.0"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
 dependencies = [
-    { name = "huggingface-hub", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "packaging", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "psutil", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "pyyaml", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "safetensors", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
+    { name = "huggingface-hub" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "packaging" },
+    { name = "psutil" },
+    { name = "pyyaml" },
+    { name = "safetensors" },
     { name = "torch", version = "2.5.1", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
     { name = "torch", version = "2.9.0", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
 ]
@@ -268,8 +269,9 @@ dependencies = [
     { name = "fastapi" },
     { name = "loguru" },
     { name = "modelscope" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra != 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra != 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra != 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra != 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
     { name = "openpyxl" },
     { name = "pandas" },
     { name = "protobuf" },
@@ -283,12 +285,14 @@ dependencies = [
 
 [package.optional-dependencies]
 npu-cann81-910b = [
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
     { name = "peft", version = "0.13.2", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
     { name = "torch", version = "2.5.1", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
     { name = "torch-npu", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' and sys_platform == 'linux'" },
     { name = "transformers", version = "4.41.2", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
 ]
 npu-cann85-a3 = [
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
     { name = "peft", version = "0.18.1", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
     { name = "torch", version = "2.9.0", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
     { name = "torch-npu", version = "2.9.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'linux'" },
@@ -310,6 +314,8 @@ requires-dist = [
     { name = "loguru" },
     { name = "modelscope", specifier = ">=1.31.0" },
     { name = "numpy" },
+    { name = "numpy", marker = "extra == 'npu-cann81-910b'", specifier = ">=1.26,<2" },
+    { name = "numpy", marker = "extra == 'npu-cann85-a3'", specifier = ">=1.26,<2" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas" },
     { name = "peft", marker = "extra == 'npu-cann81-910b'", specifier = "==0.13.2" },
@@ -445,14 +451,14 @@ name = "huggingface-hub"
 version = "0.36.0"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
 dependencies = [
-    { name = "filelock", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "fsspec", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "hf-xet", marker = "(platform_machine == 'aarch64' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (platform_machine == 'aarch64' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (platform_machine == 'aarch64' and extra == 'extra-18-dianxin-auto-train-runtime') or (platform_machine == 'amd64' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (platform_machine == 'amd64' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (platform_machine == 'amd64' and extra == 'extra-18-dianxin-auto-train-runtime') or (platform_machine == 'arm64' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (platform_machine == 'arm64' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (platform_machine == 'arm64' and extra == 'extra-18-dianxin-auto-train-runtime') or (platform_machine == 'x86_64' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (platform_machine == 'x86_64' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (platform_machine == 'x86_64' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "packaging", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "pyyaml", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "requests", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "tqdm", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
-    { name = "typing-extensions", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
+    { name = "filelock" },
+    { name = "fsspec" },
+    { name = "hf-xet", marker = "platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64'" },
+    { name = "packaging" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "tqdm" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/98/63/4910c5fa9128fdadf6a9c5ac138e8b1b6cee4ca44bf7915bbfbce4e355ee/huggingface_hub-0.36.0.tar.gz", hash = "sha256:47b3f0e2539c39bf5cde015d63b72ec49baff67b6931c3d97f3f84532e2b8d25" }
 wheels = [
@@ -473,7 +479,7 @@ name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
 dependencies = [
-    { name = "markupsafe", marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or extra == 'extra-18-dianxin-auto-train-runtime'" },
+    { name = "markupsafe" },
 ]
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d" }
 wheels = [
@@ -606,6 +612,43 @@ resolution-markers = [
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/6c/4f/ccdb8ad3a38e583f214547fd2f7ff1fc160c43a75af88e6aec213404b96a/networkx-3.5.tar.gz", hash = "sha256:d4c6f9cf81f52d69230866796b82afbccdec3db7ae4fbd1b65ea750feed50037" }
 wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/eb/8d/776adee7bbf76365fdd7f2552710282c79a4ead5d2a46408c9043a2b70ba/networkx-3.5-py3-none-any.whl", hash = "sha256:0030d386a9a06dee3565298b4a734b68589749a544acbb6c412dc9e2489ec6ec" },
+]
+
+[[package]]
+name = "numpy"
+version = "1.26.4"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
+resolution-markers = [
+    "python_full_version >= '3.12'",
+    "python_full_version == '3.11.*'",
+    "python_full_version < '3.11'",
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/65/6e/09db70a523a96d25e115e71cc56a6f9031e7b8cd166c1ac8438307c14058/numpy-1.26.4.tar.gz", hash = "sha256:2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/a7/94/ace0fdea5241a27d13543ee117cbc65868e82213fb31a8eb7fe9ff23f313/numpy-1.26.4-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:9ff0f4f29c51e2803569d7a51c2304de5554655a60c5d776e35b4a41413830d0" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/20/f7/b24208eba89f9d1b58c1668bc6c8c4fd472b20c45573cb767f59d49fb0f6/numpy-1.26.4-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:2e4ee3380d6de9c9ec04745830fd9e2eccb3e6cf790d39d7b98ffd19b0dd754a" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/fc/a5/4beee6488160798683eed5bdb7eead455892c3b4e1f78d79d8d3f3b084ac/numpy-1.26.4-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:d209d8969599b27ad20994c8e41936ee0964e6da07478d6c35016bc386b66ad4" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/4b/d7/ecf66c1cd12dc28b4040b15ab4d17b773b87fa9d29ca16125de01adb36cd/numpy-1.26.4-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ffa75af20b44f8dba823498024771d5ac50620e6915abac414251bd971b4529f" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/24/03/6f229fe3187546435c4f6f89f6d26c129d4f5bed40552899fcf1f0bf9e50/numpy-1.26.4-cp310-cp310-musllinux_1_1_aarch64.whl", hash = "sha256:62b8e4b1e28009ef2846b4c7852046736bab361f7aeadeb6a5b89ebec3c7055a" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/39/fe/39ada9b094f01f5a35486577c848fe274e374bbf8d8f472e1423a0bbd26d/numpy-1.26.4-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:a4abb4f9001ad2858e7ac189089c42178fcce737e4169dc61321660f1a96c7d2" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/d5/ef/6ad11d51197aad206a9ad2286dc1aac6a378059e06e8cf22cd08ed4f20dc/numpy-1.26.4-cp310-cp310-win32.whl", hash = "sha256:bfe25acf8b437eb2a8b2d49d443800a5f18508cd811fea3181723922a8a82b07" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/19/77/538f202862b9183f54108557bfda67e17603fc560c384559e769321c9d92/numpy-1.26.4-cp310-cp310-win_amd64.whl", hash = "sha256:b97fe8060236edf3662adfc2c633f56a08ae30560c56310562cb4f95500022d5" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/11/57/baae43d14fe163fa0e4c47f307b6b2511ab8d7d30177c491960504252053/numpy-1.26.4-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:4c66707fabe114439db9068ee468c26bbdf909cac0fb58686a42a24de1760c71" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/1a/2e/151484f49fd03944c4a3ad9c418ed193cfd02724e138ac8a9505d056c582/numpy-1.26.4-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:edd8b5fe47dab091176d21bb6de568acdd906d1887a4584a15a9a96a1dca06ef" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/79/ae/7e5b85136806f9dadf4878bf73cf223fe5c2636818ba3ab1c585d0403164/numpy-1.26.4-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7ab55401287bfec946ced39700c053796e7cc0e3acbef09993a9ad2adba6ca6e" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/3a/d0/edc009c27b406c4f9cbc79274d6e46d634d139075492ad055e3d68445925/numpy-1.26.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:666dbfb6ec68962c033a450943ded891bed2d54e6755e35e5835d63f4f6931d5" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/09/bf/2b1aaf8f525f2923ff6cfcf134ae5e750e279ac65ebf386c75a0cf6da06a/numpy-1.26.4-cp311-cp311-musllinux_1_1_aarch64.whl", hash = "sha256:96ff0b2ad353d8f990b63294c8986f1ec3cb19d749234014f4e7eb0112ceba5a" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/df/a0/4e0f14d847cfc2a633a1c8621d00724f3206cfeddeb66d35698c4e2cf3d2/numpy-1.26.4-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:60dedbb91afcbfdc9bc0b1f3f402804070deed7392c23eb7a7f07fa857868e8a" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/d2/b7/a734c733286e10a7f1a8ad1ae8c90f2d33bf604a96548e0a4a3a6739b468/numpy-1.26.4-cp311-cp311-win32.whl", hash = "sha256:1af303d6b2210eb850fcf03064d364652b7120803a0b872f5211f5234b399f20" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/3f/6b/5610004206cf7f8e7ad91c5a85a8c71b2f2f8051a0c0c4d5916b76d6cbb2/numpy-1.26.4-cp311-cp311-win_amd64.whl", hash = "sha256:cd25bcecc4974d09257ffcd1f098ee778f7834c3ad767fe5db785be9a4aa9cb2" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/95/12/8f2020a8e8b8383ac0177dc9570aad031a3beb12e38847f7129bacd96228/numpy-1.26.4-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:b3ce300f3644fb06443ee2222c2201dd3a89ea6040541412b8fa189341847218" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/75/5b/ca6c8bd14007e5ca171c7c03102d17b4f4e0ceb53957e8c44343a9546dcc/numpy-1.26.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:03a8c78d01d9781b28a6989f6fa1bb2c4f2d51201cf99d3dd875df6fbd96b23b" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/79/f8/97f10e6755e2a7d027ca783f63044d5b1bc1ae7acb12afe6a9b4286eac17/numpy-1.26.4-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9fad7dcb1aac3c7f0584a5a8133e3a43eeb2fe127f47e3632d43d677c66c102b" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/0f/50/de23fde84e45f5c4fda2488c759b69990fd4512387a8632860f3ac9cd225/numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:675d61ffbfa78604709862923189bad94014bef562cc35cf61d3a07bba02a7ed" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/4c/0c/9c603826b6465e82591e05ca230dfc13376da512b25ccd0894709b054ed0/numpy-1.26.4-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:ab47dbe5cc8210f55aa58e4805fe224dac469cde56b9f731a4c098b91917159a" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/76/8c/2ba3902e1a0fc1c74962ea9bb33a534bb05984ad7ff9515bf8d07527cadd/numpy-1.26.4-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:1dda2e7b4ec9dd512f84935c5f126c8bd8b9f2fc001e9f54af255e8c5f16b0e0" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl", hash = "sha256:50193e430acfc1346175fcbdaa28ffec49947a06918b7b92130744e81e640110" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/16/2e/86f24451c2d530c88daf997cb8d6ac622c1d40d19f5a031ed68a4b73a374/numpy-1.26.4-cp312-cp312-win_amd64.whl", hash = "sha256:08beddf13648eb95f8d867350f6a018a4be2e5ad54c8d8caed89ebca558b2818" },
 ]
 
 [[package]]
@@ -1132,8 +1175,9 @@ name = "pandas"
 version = "2.3.3"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra != 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra != 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra != 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra != 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
     { name = "python-dateutil" },
     { name = "pytz" },
     { name = "tzdata" },
@@ -1175,8 +1219,7 @@ resolution-markers = [
 dependencies = [
     { name = "accelerate" },
     { name = "huggingface-hub" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
     { name = "packaging" },
     { name = "psutil" },
     { name = "pyyaml" },
@@ -1202,8 +1245,9 @@ resolution-markers = [
 dependencies = [
     { name = "accelerate" },
     { name = "huggingface-hub" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime')" },
     { name = "packaging" },
     { name = "psutil" },
     { name = "pyyaml" },
@@ -1523,8 +1567,9 @@ version = "1.7.2"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
 dependencies = [
     { name = "joblib" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' or extra == 'extra-18-dianxin-auto-train-npu-cann85-a3'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra != 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra != 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra != 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra != 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
     { name = "scipy", version = "1.16.3", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
     { name = "threadpoolctl" },
@@ -1556,7 +1601,8 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra != 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra != 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
 ]
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/0f/37/6964b830433e654ec7485e45a00fc9a27cf868d622838f6b6d9c5ec0d532/scipy-1.15.3.tar.gz", hash = "sha256:eae3cf522bc7df64b42cad3925c876e1b0b6c35c1337c93e12c0f366f55b0eaf" }
 wheels = [
@@ -1598,7 +1644,8 @@ resolution-markers = [
     "python_full_version == '3.11.*'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version >= '3.11' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra != 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra != 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
 ]
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/0a/ca/d8ace4f98322d01abcd52d381134344bf7b431eba7ed8b42bdea5a3c2ac9/scipy-1.16.3.tar.gz", hash = "sha256:01e87659402762f43bd2fee13370553a17ada367d42e7487800bf2916535aecb" }
 wheels = [
@@ -1902,7 +1949,7 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "torch", version = "2.5.1", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
+    { name = "torch", version = "2.5.1", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "python_full_version < '3.12'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/85/6f/a30205d938bb096b9caa33c939d3268f829502bafd99b290107196f9a036/torch_npu-2.5.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f591ad92e650debb6e3cf482ed8188d14849bf8925d7f5417db4b7949d4f7167", size = 14029949, upload-time = "2025-04-25T10:18:31.145Z" },
@@ -1956,8 +2003,7 @@ resolution-markers = [
 dependencies = [
     { name = "filelock" },
     { name = "huggingface-hub" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann81-910b') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" } },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "regex" },
@@ -1983,8 +2029,9 @@ resolution-markers = [
 dependencies = [
     { name = "filelock" },
     { name = "huggingface-hub" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
-    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version < '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime')" },
+    { name = "numpy", version = "2.3.4", source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }, marker = "(python_full_version >= '3.11' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann85-a3' and extra == 'extra-18-dianxin-auto-train-runtime') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-npu-cann85-a3') or (extra == 'extra-18-dianxin-auto-train-npu-cann81-910b' and extra == 'extra-18-dianxin-auto-train-runtime')" },
     { name = "packaging" },
     { name = "pyyaml" },
     { name = "regex" },
