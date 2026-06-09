@@ -133,6 +133,31 @@ def get_inference_unload_timeout() -> float:
     return env_float("INFERENCE_UNLOAD_TIMEOUT", 60.0)
 
 
+def get_inference_upstream_urls() -> list[str]:
+    raw_value = env_str("INFERENCE_UPSTREAM_URLS", "") or ""
+    urls = []
+    for item in raw_value.split(","):
+        url = item.strip().rstrip("/")
+        if url:
+            urls.append(url)
+    return urls
+
+
+def is_inference_gateway_enabled() -> bool:
+    return bool(get_inference_upstream_urls())
+
+
+def get_inference_upstream_timeout() -> float:
+    return env_float("INFERENCE_UPSTREAM_TIMEOUT", 60.0)
+
+
+def get_inference_lb_policy() -> str:
+    policy = (env_str("INFERENCE_LB_POLICY", "round_robin") or "round_robin").lower()
+    if policy not in {"round_robin", "least_pending"}:
+        return "round_robin"
+    return policy
+
+
 def parse_visible_gpu_devices() -> list[str]:
     return get_visible_devices()
 
@@ -158,8 +183,12 @@ __all__ = [
     "get_inference_base_model",
     "get_inference_max_batch_size",
     "get_inference_queue_age_weight_seconds",
+    "get_inference_lb_policy",
     "get_inference_unload_timeout",
+    "get_inference_upstream_timeout",
+    "get_inference_upstream_urls",
     "get_inference_workers_per_gpu",
+    "is_inference_gateway_enabled",
     "get_model_output_dir",
     "get_redis_url",
     "parse_visible_gpu_devices",

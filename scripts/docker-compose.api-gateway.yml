@@ -1,0 +1,107 @@
+version: "3.9"
+
+services:
+  api:
+    image: ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend}
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      API_PORT: "9011"
+      ASCEND_RT_VISIBLE_DEVICES: ""
+      INFERENCE_UPSTREAM_URLS: "http://api-npu0:9011,http://api-npu6:9011,http://api-npu7:9011"
+      INFERENCE_UPSTREAM_TIMEOUT: ${INFERENCE_UPSTREAM_TIMEOUT:-60}
+      INFERENCE_LB_POLICY: ${INFERENCE_LB_POLICY:-round_robin}
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./models:/app/models
+    ports:
+      - "${API_PORT:-9011}:9011"
+    command: ["api", "--host", "0.0.0.0", "--port", "9011"]
+    depends_on:
+      - redis
+      - api-npu0
+      - api-npu6
+      - api-npu7
+    restart: unless-stopped
+
+  api-npu0:
+    image: ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend}
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      ASCEND_RT_VISIBLE_DEVICES: "0"
+      API_PORT: "9011"
+      INFERENCE_UPSTREAM_URLS: ""
+    privileged: true
+    shm_size: ${DX_ASCEND_SHM_SIZE:-20g}
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./models:/app/models
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin:/usr/local/sbin:ro
+    ports:
+      - "9012:9011"
+    command: ["api", "--host", "0.0.0.0", "--port", "9011"]
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  api-npu6:
+    image: ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend}
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      ASCEND_RT_VISIBLE_DEVICES: "6"
+      API_PORT: "9011"
+      INFERENCE_UPSTREAM_URLS: ""
+    privileged: true
+    shm_size: ${DX_ASCEND_SHM_SIZE:-20g}
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./models:/app/models
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin:/usr/local/sbin:ro
+    ports:
+      - "9013:9011"
+    command: ["api", "--host", "0.0.0.0", "--port", "9011"]
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  api-npu7:
+    image: ${DX_ASCEND_IMAGE_NAME:-dianxin_auto_train:ascend}
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      ASCEND_RT_VISIBLE_DEVICES: "7"
+      API_PORT: "9011"
+      INFERENCE_UPSTREAM_URLS: ""
+    privileged: true
+    shm_size: ${DX_ASCEND_SHM_SIZE:-20g}
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./models:/app/models
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - /usr/local/sbin:/usr/local/sbin:ro
+    ports:
+      - "9014:9011"
+    command: ["api", "--host", "0.0.0.0", "--port", "9011"]
+    depends_on:
+      - redis
+    restart: unless-stopped

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
-from src.inference.service import get_inference_manager
+from src.config import is_inference_gateway_enabled
+from src.inference.gateway import InferenceGatewayError, get_inference_gateway
 from src.schemas import (
     InferenceServiceStatusResponse,
     LoraModelLoadRequest,
@@ -19,6 +20,22 @@ from src.schemas import (
 router = APIRouter(prefix="/inference", tags=["推理服务"])
 
 
+def _payload_dict(payload) -> dict:
+    if hasattr(payload, "model_dump"):
+        return payload.model_dump()
+    return payload.dict()
+
+
+def _raise_gateway_error(exc: InferenceGatewayError) -> None:
+    raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+def _get_inference_manager():
+    from src.inference.service import get_inference_manager
+
+    return get_inference_manager()
+
+
 @router.post(
     "/models/load",
     response_model=LoraModelLoadResponse,
@@ -27,7 +44,15 @@ router = APIRouter(prefix="/inference", tags=["推理服务"])
     response_description="模型加载结果",
 )
 def load_lora_model(payload: LoraModelLoadRequest) -> LoraModelLoadResponse:
-    manager = get_inference_manager()
+    if is_inference_gateway_enabled():
+        gateway = get_inference_gateway()
+        try:
+            result = gateway.load_model(_payload_dict(payload))
+        except InferenceGatewayError as exc:
+            _raise_gateway_error(exc)
+        return LoraModelLoadResponse(**result)
+
+    manager = _get_inference_manager()
     try:
         model_id = manager.load_model(payload.model_dir, payload.max_length)
     except FileNotFoundError as exc:
@@ -47,7 +72,15 @@ def load_lora_model(payload: LoraModelLoadRequest) -> LoraModelLoadResponse:
     response_description="模型卸载结果",
 )
 def unload_lora_model(payload: LoraModelUnloadRequest) -> LoraModelUnloadResponse:
-    manager = get_inference_manager()
+    if is_inference_gateway_enabled():
+        gateway = get_inference_gateway()
+        try:
+            result = gateway.unload_model(_payload_dict(payload))
+        except InferenceGatewayError as exc:
+            _raise_gateway_error(exc)
+        return LoraModelUnloadResponse(**result)
+
+    manager = _get_inference_manager()
     try:
         manager.unload_model(payload.model_id)
     except KeyError as exc:
@@ -67,7 +100,15 @@ def unload_lora_model(payload: LoraModelUnloadRequest) -> LoraModelUnloadRespons
 def predict_lora(payload: LoraPredictRequest) -> LoraPredictResponse:
     if not payload.texts:
         raise HTTPException(status_code=400, detail="texts must not be empty")
-    manager = get_inference_manager()
+    if is_inference_gateway_enabled():
+        gateway = get_inference_gateway()
+        try:
+            result = gateway.predict(_payload_dict(payload))
+        except InferenceGatewayError as exc:
+            _raise_gateway_error(exc)
+        return LoraPredictResponse(**result)
+
+    manager = _get_inference_manager()
     try:
         future = manager.enqueue(payload.model_id, payload.texts, payload.top_n)
     except KeyError as exc:
@@ -89,7 +130,20 @@ def predict_lora(payload: LoraPredictRequest) -> LoraPredictResponse:
 )
 def list_models() -> ModelListResponse:
     """获取所有可用模型列表及其状态"""
-    manager = get_inference_manager()
+    if is_inference_gateway_enabled():
+        gateway = get_inference_gateway()
+        try:
+            result = gateway.list_models()
+        except InferenceGatewayError as exc:
+            _raise_gateway_error(exc)
+        models = [ModelInfo(**m) for m in result["models"]]
+        return ModelListResponse(
+            models=models,
+            total=result["total"],
+            loaded_count=result["loaded_count"],
+        )
+
+    manager = _get_inference_manager()
     models_data = manager.list_models()
     models = [ModelInfo(**m) for m in models_data]
     loaded_count = sum(1 for m in models if m.status == "loaded")
@@ -107,7 +161,20 @@ def query_models(payload: ModelQueryRequest) -> ModelListResponse:
     """根据模型ID列表查询模型"""
     if not payload.model_ids:
         raise HTTPException(status_code=400, detail="model_ids must not be empty")
-    manager = get_inference_manager()
+    if is_inference_gateway_enabled():
+        gateway = get_inference_gateway()
+        try:
+            result = gateway.query_models(_payload_dict(payload))
+        except InferenceGatewayError as exc:
+            _raise_gateway_error(exc)
+        models = [ModelInfo(**m) for m in result["models"]]
+        return ModelListResponse(
+            models=models,
+            total=result["total"],
+            loaded_count=result["loaded_count"],
+        )
+
+    manager = _get_inference_manager()
     models_data = manager.query_models(payload.model_ids)
     models = [ModelInfo(**m) for m in models_data]
     loaded_count = sum(1 for m in models if m.status == "loaded")
@@ -123,7 +190,19 @@ def query_models(payload: ModelQueryRequest) -> ModelListResponse:
 )
 def get_service_status() -> InferenceServiceStatusResponse:
     """获取推理服务状态，包括Worker和显存信息"""
-    manager = get_inference_manager()
+    if is_inference_gateway_enabled():
+        gateway = get_inference_gateway()
+        status_data = gateway.get_service_status()
+        workers = [WorkerStatus(**w) for w in status_data["workers"]]
+        return InferenceServiceStatusResponse(
+            service_status=status_data["service_status"],
+            workers=workers,
+            total_workers=status_data["total_workers"],
+            loaded_models_count=status_data["loaded_models_count"],
+            pending_requests=status_data["pending_requests"],
+        )
+
+    manager = _get_inference_manager()
     status_data = manager.get_service_status()
     workers = [WorkerStatus(**w) for w in status_data["workers"]]
     return InferenceServiceStatusResponse(
