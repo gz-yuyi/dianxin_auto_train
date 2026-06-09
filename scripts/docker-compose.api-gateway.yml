@@ -47,8 +47,6 @@ services:
       - ./models:/app/models
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
       - /usr/local/sbin:/usr/local/sbin:ro
-    ports:
-      - "9012:9011"
     command: ["api", "--host", "0.0.0.0", "--port", "9011"]
     depends_on:
       - redis
@@ -73,8 +71,6 @@ services:
       - ./models:/app/models
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
       - /usr/local/sbin:/usr/local/sbin:ro
-    ports:
-      - "9013:9011"
     command: ["api", "--host", "0.0.0.0", "--port", "9011"]
     depends_on:
       - redis
@@ -99,8 +95,6 @@ services:
       - ./models:/app/models
       - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
       - /usr/local/sbin:/usr/local/sbin:ro
-    ports:
-      - "9014:9011"
     command: ["api", "--host", "0.0.0.0", "--port", "9011"]
     depends_on:
       - redis
