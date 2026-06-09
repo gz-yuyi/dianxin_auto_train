@@ -99,7 +99,10 @@ def _resolve_peft_adapter_path(adapter_path: Path) -> Path:
         target = compat_path / source.name
         if target.exists() or target.is_symlink():
             continue
-        target.symlink_to(source)
+        try:
+            target.symlink_to(source)
+        except FileExistsError:
+            continue
 
     logger.warning(
         "Using sanitized PEFT config for {} after ignoring no-op unsupported keys: {}",
