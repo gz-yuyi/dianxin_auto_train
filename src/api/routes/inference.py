@@ -36,6 +36,12 @@ def _get_inference_manager():
     return get_inference_manager()
 
 
+def _is_model_state_error(exc: Exception) -> bool:
+    from src.inference.service import InferenceModelStateError
+
+    return isinstance(exc, InferenceModelStateError)
+
+
 @router.post(
     "/models/load",
     response_model=LoraModelLoadResponse,
@@ -117,7 +123,12 @@ def predict_lora(payload: LoraPredictRequest) -> LoraPredictResponse:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    result = future.result()
+    try:
+        result = future.result()
+    except Exception as exc:
+        if _is_model_state_error(exc):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return LoraPredictResponse(**result)
 
 

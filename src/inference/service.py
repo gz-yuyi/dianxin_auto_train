@@ -43,6 +43,70 @@ _PEFT_METADATA_KEYS = {"peft_version"}
 _PEFT_COMPAT_ROOT = Path(tempfile.gettempdir()) / "dianxin_auto_train_peft_compat"
 
 
+class InferenceModelStateError(RuntimeError):
+    """Raised when loaded model artifacts are internally inconsistent."""
+
+
+def _torch_load(path: Path, *, map_location: str):
+    try:
+        return torch.load(path, map_location=map_location, weights_only=True)
+    except TypeError:
+        return torch.load(path, map_location=map_location)
+
+
+def _hash_file(path: Path, digest) -> None:
+    digest.update(path.as_posix().encode("utf-8"))
+    digest.update(b"\0")
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    digest.update(b"\0")
+
+
+def _build_artifact_cache_key(adapter_path: Path, head_path: Path, label_mapping_path: Path) -> str:
+    digest = hashlib.sha256()
+    for path in (head_path, label_mapping_path):
+        _hash_file(path, digest)
+    for path in sorted(item for item in adapter_path.rglob("*") if item.is_file()):
+        _hash_file(path, digest)
+    return digest.hexdigest()
+
+
+def _validate_label_mappings(model_id: str, label_to_id: object, id_to_label: object) -> None:
+    if not isinstance(label_to_id, dict) or not isinstance(id_to_label, dict):
+        raise InferenceModelStateError(f"Model {model_id} label mapping must contain two dictionaries")
+    if not label_to_id or not id_to_label:
+        raise InferenceModelStateError(f"Model {model_id} label mapping must not be empty")
+
+    expected_ids = set(range(len(id_to_label)))
+    actual_ids = set(id_to_label)
+    if actual_ids != expected_ids:
+        raise InferenceModelStateError(
+            f"Model {model_id} label ids must be contiguous 0..{len(id_to_label) - 1}; "
+            f"got {sorted(actual_ids)}"
+        )
+
+    inverse = {label: idx for idx, label in id_to_label.items()}
+    if label_to_id != inverse:
+        raise InferenceModelStateError(f"Model {model_id} label_to_id and id_to_label are inconsistent")
+
+
+def _classifier_head_num_labels(state_dict: object, head_path: Path) -> int:
+    if not isinstance(state_dict, dict):
+        raise InferenceModelStateError(f"Classifier head {head_path} must be a state dict")
+
+    weight = state_dict.get("weight")
+    bias = state_dict.get("bias")
+    if weight is None or not hasattr(weight, "shape") or len(weight.shape) != 2:
+        raise InferenceModelStateError(f"Classifier head {head_path} is missing a 2D weight tensor")
+
+    num_labels = int(weight.shape[0])
+    if bias is not None:
+        if not hasattr(bias, "shape") or len(bias.shape) != 1 or int(bias.shape[0]) != num_labels:
+            raise InferenceModelStateError(f"Classifier head {head_path} bias shape does not match weight shape")
+    return num_labels
+
+
 def _is_noop_unsupported_peft_config(key: str, value: object, raw_config: dict) -> bool:
     if key in _PEFT_METADATA_KEYS:
         return True
@@ -172,6 +236,7 @@ class AdapterState:
     max_length: int
     label_to_id: dict[str, int]
     id_to_label: dict[int, str]
+    cache_key: str
     draining: bool = False
     active_batches: int = 0
     unload_event: threading.Event = field(default_factory=threading.Event)
@@ -228,6 +293,7 @@ class InferenceWorker:
         self._tokenizer: AutoTokenizer | None = None
         self._adapter_name_map: dict[str, str] = {}
         self._head_cache: dict[str, nn.Linear] = {}
+        self._adapter_cache_keys: dict[str, str] = {}
 
     def start(self) -> None:
         self.thread.start()
@@ -304,11 +370,19 @@ class InferenceWorker:
                 future.set_result(None)
 
     def _ensure_adapter_ready(self, adapter_id: str) -> None:
-        if adapter_id in self._adapter_name_map and adapter_id in self._head_cache:
-            return
         model_info = self.manager.get_adapter_state(adapter_id)
         if model_info is None:
             raise RuntimeError(f"Adapter {adapter_id} not registered")
+        cached_key = self._adapter_cache_keys.get(adapter_id)
+        if (
+            cached_key == model_info.cache_key
+            and adapter_id in self._adapter_name_map
+            and adapter_id in self._head_cache
+        ):
+            return
+        if adapter_id in self._adapter_name_map or adapter_id in self._head_cache:
+            self._evict_adapter(adapter_id, require_delete=True)
+
         if self._peft_model is None:
             self._load_first_adapter(adapter_id, model_info.adapter_path)
             if self._classifier is not None:
@@ -318,6 +392,7 @@ class InferenceWorker:
         if adapter_id not in self._head_cache:
             head = self._load_head(model_info.head_path, len(model_info.id_to_label))
             self._head_cache[adapter_id] = head
+        self._adapter_cache_keys[adapter_id] = model_info.cache_key
 
     def _load_first_adapter(self, adapter_id: str, adapter_path: Path) -> None:
         if self._base_model is None:
@@ -345,6 +420,7 @@ class InferenceWorker:
             raise RuntimeError("Current PEFT version does not support loading multiple adapters")
         peft_adapter_path = _resolve_peft_adapter_path(adapter_path)
         self._peft_model.load_adapter(peft_adapter_path, adapter_name=adapter_id, is_trainable=False)
+        self._peft_model.eval()
         self._adapter_name_map[adapter_id] = adapter_id
 
     def _load_head(self, head_path: Path, num_labels: int) -> nn.Linear:
@@ -352,7 +428,13 @@ class InferenceWorker:
             raise RuntimeError("Classifier not initialized")
         hidden = self._classifier.bert.config.hidden_size
         head = nn.Linear(hidden, num_labels)
-        state_dict = torch.load(head_path, map_location="cpu")
+        state_dict = _torch_load(head_path, map_location="cpu")
+        actual_num_labels = _classifier_head_num_labels(state_dict, head_path)
+        if actual_num_labels != num_labels:
+            raise InferenceModelStateError(
+                f"Classifier head {head_path} outputs {actual_num_labels} labels, "
+                f"but label mapping contains {num_labels}"
+            )
         head.load_state_dict(state_dict)
         head.to(self.device)
         head.eval()
@@ -364,6 +446,11 @@ class InferenceWorker:
         model_info = self.manager.get_adapter_state(adapter_id)
         if model_info is None:
             raise RuntimeError(f"Adapter {adapter_id} not registered")
+        if self._adapter_cache_keys.get(adapter_id) != model_info.cache_key:
+            self._ensure_adapter_ready(adapter_id)
+            model_info = self.manager.get_adapter_state(adapter_id)
+            if model_info is None:
+                raise RuntimeError(f"Adapter {adapter_id} not registered")
         adapter_name = self._adapter_name_map.get(adapter_id)
         if adapter_name is None:
             raise RuntimeError(f"Adapter {adapter_id} not loaded in worker")
@@ -392,24 +479,59 @@ class InferenceWorker:
         attention_mask = encoded["attention_mask"].to(self.device)
         with torch.no_grad():
             outputs = self._classifier(input_ids, attention_mask)
+            self._validate_outputs(adapter_id, outputs, len(items), len(model_info.id_to_label))
             probs = F.softmax(outputs, dim=1).float().cpu().tolist()
 
         id_to_label = model_info.id_to_label
+        labels = [id_to_label[idx] for idx in range(len(id_to_label))]
         for item, row in zip(items, probs):
-            labels = [id_to_label[idx] for idx in range(len(row))]
             label_probs = {label: float(prob) for label, prob in zip(labels, row)}
             sorted_items = sorted(label_probs.items(), key=lambda kv: kv[1], reverse=True)
             top_n = min(item.request.top_n, len(sorted_items))
             item.request.set_item_result(item.index, sorted_items[0][0], sorted_items[:top_n], label_probs)
 
+    def _validate_outputs(self, adapter_id: str, outputs, batch_size: int, num_labels: int) -> None:
+        shape = getattr(outputs, "shape", None)
+        if shape is None or len(shape) != 2:
+            raise InferenceModelStateError(f"Model {adapter_id} produced invalid output shape: {shape}")
+        actual_batch_size = int(shape[0])
+        actual_num_labels = int(shape[1])
+        if actual_batch_size != batch_size:
+            raise InferenceModelStateError(
+                f"Model {adapter_id} produced batch size {actual_batch_size}, expected {batch_size}"
+            )
+        if actual_num_labels != num_labels:
+            head = self._head_cache.get(adapter_id)
+            head_out_features = getattr(head, "out_features", None)
+            raise InferenceModelStateError(
+                f"Model {adapter_id} produced {actual_num_labels} logits, "
+                f"but label mapping contains {num_labels} labels "
+                f"(worker={self.worker_id}, head_out_features={head_out_features}, "
+                f"cache_key={self._adapter_cache_keys.get(adapter_id)})"
+            )
+
     def unload_adapter(self, adapter_id: str) -> None:
-        adapter_name = self._adapter_name_map.pop(adapter_id, None)
+        self._evict_adapter(adapter_id, require_delete=False)
+        empty_cache(self.device)
+
+    def _evict_adapter(self, adapter_id: str, *, require_delete: bool) -> None:
+        adapter_name = self._adapter_name_map.get(adapter_id)
+        if (
+            require_delete
+            and self._peft_model is not None
+            and adapter_name is not None
+            and not hasattr(self._peft_model, "delete_adapter")
+        ):
+            raise InferenceModelStateError(
+                "Current PEFT version does not support reloading changed adapters without deleting the old adapter"
+            )
+        self._adapter_name_map.pop(adapter_id, None)
         self._head_cache.pop(adapter_id, None)
+        self._adapter_cache_keys.pop(adapter_id, None)
         if self._peft_model is None or adapter_name is None:
             return
         if hasattr(self._peft_model, "delete_adapter"):
             self._peft_model.delete_adapter(adapter_name)
-        empty_cache(self.device)
 
 
 class LoraInferenceManager:
@@ -683,6 +805,15 @@ class LoraInferenceManager:
             raise FileNotFoundError(f"Label mapping not found: {label_mapping_path}")
         with label_mapping_path.open("rb") as handle:
             label_to_id, id_to_label = pickle.load(handle)
+        _validate_label_mappings(model_id, label_to_id, id_to_label)
+        state_dict = _torch_load(head_path, map_location="cpu")
+        head_num_labels = _classifier_head_num_labels(state_dict, head_path)
+        if head_num_labels != len(id_to_label):
+            raise InferenceModelStateError(
+                f"Classifier head {head_path} outputs {head_num_labels} labels, "
+                f"but label mapping contains {len(id_to_label)}"
+            )
+        cache_key = _build_artifact_cache_key(adapter_path, head_path, label_mapping_path)
         return AdapterState(
             model_id=model_id,
             adapter_path=adapter_path,
@@ -691,6 +822,7 @@ class LoraInferenceManager:
             max_length=max_length,
             label_to_id=label_to_id,
             id_to_label=id_to_label,
+            cache_key=cache_key,
         )
 
 
