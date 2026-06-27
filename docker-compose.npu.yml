@@ -26,6 +26,8 @@ services:
     shm_size: ${DX_ASCEND_SHM_SIZE:-20g}
     environment:
       ASCEND_RT_VISIBLE_DEVICES: ${ASCEND_RT_VISIBLE_DEVICES:-0}
+      CELERY_WORKER_POOL: ${CELERY_WORKER_POOL:-solo}
+      TOKENIZERS_PARALLELISM: ${TOKENIZERS_PARALLELISM:-false}
     devices:
       - /dev/davinci0:/dev/davinci0
       - /dev/davinci_manager:/dev/davinci_manager

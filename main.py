@@ -53,11 +53,19 @@ def start_api(host: str, port: int) -> None:
 
 @cli.command("worker")
 def start_worker() -> None:
+    # Import task modules explicitly so workers started outside the API process
+    # register the training task before consuming from Celery.
+    import src.tasks  # noqa: F401
+
     resolved = get_worker_max_concurrency()
     if resolved < 1:
         resolved = 1
-    logger.info("Starting worker with concurrency {}", resolved)
-    argv = ["worker", "--loglevel=info", f"--concurrency={resolved}"]
+    pool = os.getenv("CELERY_WORKER_POOL", "prefork").strip().lower() or "prefork"
+    if pool == "solo" and resolved != 1:
+        logger.warning("CELERY_WORKER_POOL=solo ignores concurrency {}; forcing concurrency to 1", resolved)
+        resolved = 1
+    logger.info("Starting worker with pool {} and concurrency {}", pool, resolved)
+    argv = ["worker", "--loglevel=info", f"--concurrency={resolved}", f"--pool={pool}"]
     celery_app.worker_main(argv)
 
 
