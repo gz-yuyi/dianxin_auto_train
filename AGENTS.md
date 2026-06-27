@@ -1,4 +1,4 @@
-# AGENTS.md
+#oss.tuyunai.cn AGENTS.md
 
 ## Remote Deployment
 
