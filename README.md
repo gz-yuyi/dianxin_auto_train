@@ -149,7 +149,7 @@ uv run python main.py train --payload-file payload.json --callback
 
 - 模型目录：训练输出目录名（例如 `artifacts/<task_id>`）。
 - 命名规则：`<model_name_en>.lora` 与 `<model_name_en>.head.pt` 位于该目录。
-- 主要接口：`POST /inference/models/load`、`POST /inference/predict`、`POST /inference/models/unload`。
+- 主要接口：`POST /inference/models/publish`（发布为可预测状态）、`POST /inference/models/load`、`POST /inference/predict`、`POST /inference/models/unload`。
 - Worker 设置：`INFERENCE_BASE_MODEL`、`INFERENCE_WORKERS_PER_GPU`、`INFERENCE_MAX_BATCH_SIZE`。
 
 ### 回调

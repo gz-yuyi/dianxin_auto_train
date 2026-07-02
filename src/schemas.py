@@ -120,6 +120,18 @@ class LoraModelLoadResponse(BaseModel):
     message: str = Field(..., title="提示信息", description="模型加载结果说明")
 
 
+class LoraModelPublishRequest(BaseModel):
+    model_id: str = Field(..., min_length=1, title="模型 ID", description="待发布模型的目录名/模型 ID，对应 artifacts/<model_id>")
+    max_length: int = Field(512, ge=8, title="最大长度", description="推理时允许的最大 Token 长度")
+    reload: bool = Field(True, title="是否重新发布", description="模型已加载时是否重新读取磁盘产物并刷新显存缓存")
+
+
+class LoraModelPublishResponse(BaseModel):
+    model_id: str = Field(..., title="模型 ID", description="已发布的模型 ID")
+    status: str = Field(..., title="状态", description="模型发布状态")
+    message: str = Field(..., title="提示信息", description="模型发布结果说明")
+
+
 class LoraModelUnloadRequest(BaseModel):
     model_id: str = Field(..., title="模型 ID", description="要卸载的模型 ID")
 
@@ -190,6 +202,8 @@ __all__ = [
     "LoraConfig",
     "LoraModelLoadRequest",
     "LoraModelLoadResponse",
+    "LoraModelPublishRequest",
+    "LoraModelPublishResponse",
     "LoraModelUnloadRequest",
     "LoraModelUnloadResponse",
     "LoraPredictRequest",

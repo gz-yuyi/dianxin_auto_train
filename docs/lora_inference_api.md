@@ -40,7 +40,40 @@
 - `model_stem` 对应训练时的 `model_name_en`（去除 `.pt` 后缀）。
 - 如果 `model_id` 已存在，可返回 `status: "loaded"`（幂等加载）或覆盖加载（实现选其一）。
 
-### 2. 卸载 LoRA 模型
+### 2. 发布 LoRA 模型
+**POST** `/inference/models/publish`
+
+将 `artifacts/<model_id>` 下的 LoRA 训练产物发布为可预测状态。该接口是业务语义上的发布接口，内部会复用模型加载逻辑；在网关模式下会广播到所有推理上游。
+
+**请求参数**:
+```json
+{
+    "model_id": "local-fc525ca520d745daa38c0dd0fdd0c5d7",
+    "max_length": 512,
+    "reload": true
+}
+```
+
+**参数说明**:
+- `model_id`: 模型目录名称，对应 `artifacts/<model_id>`。
+- `max_length`: 推理最大长度（可选，默认 512）。
+- `reload`: 模型已加载时是否重新读取磁盘产物并刷新显存缓存（可选，默认 true）。
+
+**响应**:
+```json
+{
+    "model_id": "local-fc525ca520d745daa38c0dd0fdd0c5d7",
+    "status": "loaded",
+    "message": "model published"
+}
+```
+
+**备注**:
+- 新增模型目录不会自动进入显存，需要调用本接口发布。
+- 替换已加载模型目录后也不会自动刷新，需要再次调用本接口（建议先原子替换目录，再发布）。
+- 当前在线推理仅支持 LoRA 训练产物，不支持全量 `.pt` 模型发布。
+
+### 3. 卸载 LoRA 模型
 **POST** `/inference/models/unload`
 
 **请求参数**:
@@ -62,7 +95,7 @@
 **备注**:
 - 仅卸载 LoRA adapter 与分类头，不影响 base model 常驻。
 
-### 3. 分类推理
+### 4. 分类推理
 **POST** `/inference/predict`
 
 **请求参数**:
@@ -127,7 +160,7 @@
 }
 ```
 
-### 4. 可用模型列表
+### 5. 可用模型列表
 **GET** `/inference/models`
 
 **响应**:
@@ -167,7 +200,7 @@
 - `total`: 模型总数
 - `loaded_count`: 已加载模型数量
 
-### 5. 根据模型名称列表查询模型
+### 6. 根据模型名称列表查询模型
 **POST** `/inference/models/query`
 
 **请求参数**:
@@ -211,7 +244,7 @@
 }
 ```
 
-### 6. 推理服务状态查询
+### 7. 推理服务状态查询
 **GET** `/inference/status`
 
 **响应**:

@@ -6,6 +6,8 @@ from src.schemas import (
     InferenceServiceStatusResponse,
     LoraModelLoadRequest,
     LoraModelLoadResponse,
+    LoraModelPublishRequest,
+    LoraModelPublishResponse,
     LoraModelUnloadRequest,
     LoraModelUnloadResponse,
     LoraPredictRequest,
@@ -68,6 +70,59 @@ def load_lora_model(payload: LoraModelLoadRequest) -> LoraModelLoadResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return LoraModelLoadResponse(model_id=model_id, status="loaded", message="model loaded")
+
+
+@router.post(
+    "/models/publish",
+    response_model=LoraModelPublishResponse,
+    summary="发布模型",
+    description="将 artifacts 下指定模型目录发布为可预测状态；已加载模型可重新读取磁盘产物并刷新显存缓存。",
+    response_description="模型发布结果",
+)
+def publish_lora_model(payload: LoraModelPublishRequest) -> LoraModelPublishResponse:
+    load_payload = {"model_dir": payload.model_id, "max_length": payload.max_length}
+
+    if is_inference_gateway_enabled():
+        gateway = get_inference_gateway()
+        if not payload.reload:
+            try:
+                query_result = gateway.query_models({"model_ids": [payload.model_id]})
+            except InferenceGatewayError as exc:
+                _raise_gateway_error(exc)
+            if any(model.get("model_id") == payload.model_id and model.get("status") == "loaded" for model in query_result.get("models", [])):
+                return LoraModelPublishResponse(
+                    model_id=payload.model_id,
+                    status="loaded",
+                    message="model already published",
+                )
+        try:
+            result = gateway.load_model(load_payload)
+        except InferenceGatewayError as exc:
+            _raise_gateway_error(exc)
+        return LoraModelPublishResponse(
+            model_id=result.get("model_id", payload.model_id),
+            status="loaded",
+            message="model published",
+        )
+
+    manager = _get_inference_manager()
+    if not payload.reload:
+        models = manager.query_models([payload.model_id])
+        if any(model.get("model_id") == payload.model_id and model.get("status") == "loaded" for model in models):
+            return LoraModelPublishResponse(
+                model_id=payload.model_id,
+                status="loaded",
+                message="model already published",
+            )
+    try:
+        model_id = manager.load_model(payload.model_id, payload.max_length)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return LoraModelPublishResponse(model_id=model_id, status="loaded", message="model published")
 
 
 @router.post(
