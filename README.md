@@ -137,7 +137,8 @@ uv run python main.py train --payload-file payload.json --callback
 需要在仓库 secrets 中配置 `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`。CPU/CUDA workflow 会推送 `latest`、`sha-<git-sha>` 和 tag 版本；NPU workflow 会推送 `npu` 和 `tag-npu` 版本。
 
 ### API
-服务 API 位于 `/api/v1/training/tasks`：
+服务 API 位于 `/api/v1`：
+- `POST /training/data/upload` – 上传训练数据，返回的 `filename` 用于创建训练任务
 - `POST /training/tasks` – 提交训练任务（详见 `docs/training_api.md`）
 - `GET /training/tasks/{task_id}` – 查询任务状态与指标
 - `GET /training/tasks` – 任务列表（支持状态过滤）

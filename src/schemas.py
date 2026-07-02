@@ -42,11 +42,18 @@ class HyperParameters(BaseModel):
 class TrainingTaskCreateRequest(BaseModel):
     model_name_cn: str = Field(..., title="模型中文名称", description="训练后模型的中文名称")
     model_name_en: str = Field(..., title="模型英文名称", description="训练后模型的英文名称")
-    training_data_file: str = Field(..., title="训练数据文件", description="训练数据文件路径")
-    validation_data_file: str | None = Field(None, title="验证数据文件", description="可选的独立验证数据文件路径")
+    training_data_file: str = Field(..., title="训练数据文件", description="训练数据文件名或路径；推荐使用上传接口返回的 filename")
+    validation_data_file: str | None = Field(None, title="验证数据文件", description="可选的独立验证数据文件名或路径")
     base_model: str = Field("bert-base-chinese", title="基础模型", description="训练使用的基础预训练模型名称或路径")
     hyperparameters: HyperParameters = Field(..., title="超参数配置", description="训练任务的超参数配置")
     callback_url: HttpUrl | None = Field(None, title="回调地址", description="可选的训练进度回调地址")
+
+
+class TrainingDataUploadResponse(BaseModel):
+    filename: str = Field(..., title="文件名", description="保存后的训练数据文件名，创建训练任务时传给 training_data_file 或 validation_data_file")
+    path: str = Field(..., title="容器内路径", description="文件保存后的容器内绝对路径")
+    size_bytes: int = Field(..., ge=0, title="文件大小", description="上传文件大小（字节）")
+    overwritten: bool = Field(False, title="是否覆盖", description="是否覆盖了同名已有文件")
 
 
 class TaskProgress(BaseModel):
@@ -213,6 +220,7 @@ __all__ = [
     "ModelQueryRequest",
     "StopTaskResponse",
     "TaskProgress",
+    "TrainingDataUploadResponse",
     "TrainingTaskCreateRequest",
     "TrainingTaskDetail",
     "TrainingTaskListItem",

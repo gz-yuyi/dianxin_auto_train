@@ -7,7 +7,28 @@
 
 ## 接口列表
 
-### 1. 提交训练任务
+### 1. 上传训练数据
+**POST** `/training/data/upload`
+
+用于上传 Excel 训练数据到服务端数据目录（容器内 `/app/data`）。创建训练任务时，使用响应中的 `filename` 作为 `training_data_file` 或 `validation_data_file`，不需要传绝对路径。
+
+**请求类型**: `multipart/form-data`
+
+**请求参数**:
+- `file`: Excel 文件（支持 `.xlsx`、`.xls`）
+- `overwrite`: 是否覆盖同名文件，默认 `false`
+
+**响应**:
+```json
+{
+    "filename": "环境保护_空气污染--样例1000.xlsx",
+    "path": "/app/data/环境保护_空气污染--样例1000.xlsx",
+    "size_bytes": 123456,
+    "overwritten": false
+}
+```
+
+### 2. 提交训练任务
 **POST** `/training/tasks`
 
 **请求参数**:
@@ -44,6 +65,7 @@
     "callback_url": "http://example.com/training/callback"
 }
 ```
+> `training_data_file` / `validation_data_file` 推荐填写上传接口返回的 `filename`，不需要传 `/app/data/...` 绝对路径。
 > `validation_data_file` 可选，提供时将使用该文件作为验证集并忽略 `train_val_split`。
 > `early_stopping_enabled` 仅在有验证集时生效；`early_stopping_metric` 支持 `val_accuracy`、`val_loss`、`f1_score`。
 > `lora` 为可选配置，启用后会使用 LoRA 训练；任务完成后 `artifacts` 会额外返回 `lora_adapter_path` 与 `classifier_head_path`。
@@ -58,7 +80,7 @@
 }
 ```
 
-### 2. 查询任务状态
+### 3. 查询任务状态
 **GET** `/training/tasks/{task_id}`
 
 **响应**:
@@ -83,7 +105,7 @@
 }
 ```
 
-### 3. 获取任务列表
+### 4. 获取任务列表
 **GET** `/training/tasks`
 
 **查询参数**:
@@ -110,7 +132,7 @@
 }
 ```
 
-### 4. 停止训练任务
+### 5. 停止训练任务
 **POST** `/training/tasks/{task_id}/stop`
 
 **响应**:
@@ -122,7 +144,7 @@
 }
 ```
 
-### 5. 删除训练任务
+### 6. 删除训练任务
 **DELETE** `/training/tasks/{task_id}`
 
 **响应**:

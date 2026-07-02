@@ -1,6 +1,7 @@
+from pathlib import Path as FilePath
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, File, Form, HTTPException, Path, Query, UploadFile
 
 from src.callbacks import send_external_status_change
 from src.celery_app import celery_app
@@ -8,12 +9,14 @@ from src.schemas import (
     DeleteTaskResponse,
     StopTaskResponse,
     TaskProgress,
+    TrainingDataUploadResponse,
     TrainingTaskCreateRequest,
     TrainingTaskDetail,
     TrainingTaskListItem,
     TrainingTaskListResponse,
     TrainingTaskResponse,
 )
+from src.config import get_data_root
 from src.storage import (
     create_task_record,
     delete_task_record,
@@ -27,6 +30,67 @@ from src.tasks import start_training_task
 
 
 router = APIRouter(prefix="/training/tasks", tags=["训练任务"])
+data_router = APIRouter(prefix="/training/data", tags=["训练数据"])
+
+_ALLOWED_TRAINING_DATA_SUFFIXES = {".xls", ".xlsx"}
+_UPLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+def _validate_upload_filename(filename: str | None) -> str:
+    cleaned = (filename or "").strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="filename must not be empty")
+    if "/" in cleaned or "\\" in cleaned or cleaned in {".", ".."}:
+        raise HTTPException(status_code=400, detail="filename must be a plain file name")
+    suffix = FilePath(cleaned).suffix.lower()
+    if suffix not in _ALLOWED_TRAINING_DATA_SUFFIXES:
+        allowed = ", ".join(sorted(_ALLOWED_TRAINING_DATA_SUFFIXES))
+        raise HTTPException(status_code=400, detail=f"training data file must be one of: {allowed}")
+    return cleaned
+
+
+@data_router.post(
+    "/upload",
+    response_model=TrainingDataUploadResponse,
+    summary="上传训练数据",
+    description="上传 Excel 训练数据到服务端数据目录；创建训练任务时使用响应中的 filename。",
+    response_description="训练数据上传结果",
+)
+def upload_training_data(
+    file: UploadFile = File(..., description="训练数据 Excel 文件"),
+    overwrite: bool = Form(False, description="是否覆盖同名文件"),
+) -> TrainingDataUploadResponse:
+    filename = _validate_upload_filename(file.filename)
+    data_root = get_data_root()
+    data_root.mkdir(parents=True, exist_ok=True)
+    target_path = data_root / filename
+    existed = target_path.exists()
+    if existed and not overwrite:
+        raise HTTPException(status_code=409, detail=f"training data file already exists: {filename}")
+
+    temp_path = data_root / f".{filename}.{uuid4().hex}.uploading"
+    size_bytes = 0
+    try:
+        with temp_path.open("wb") as handle:
+            while True:
+                chunk = file.file.read(_UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                size_bytes += len(chunk)
+                handle.write(chunk)
+        temp_path.replace(target_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    finally:
+        file.file.close()
+
+    return TrainingDataUploadResponse(
+        filename=filename,
+        path=str(target_path),
+        size_bytes=size_bytes,
+        overwritten=existed,
+    )
 
 
 def serialize_progress(progress: dict | None) -> TaskProgress | None:

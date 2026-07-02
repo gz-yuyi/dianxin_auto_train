@@ -17,6 +17,7 @@ dependencies = [
     "pandas",
     "protobuf",
     "python-dotenv",
+    "python-multipart",
     "redis",
     "requests",
     "scikit-learn",

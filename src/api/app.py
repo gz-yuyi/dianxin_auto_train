@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 from src.api.routes.inference import router as inference_router
+from src.api.routes.training import data_router as training_data_router
 from src.api.routes.training import router as training_router
 from src.config import is_inference_gateway_enabled
 from src.logging_utils import configure_logging
@@ -21,6 +22,7 @@ def create_app() -> FastAPI:
         description="用于模型训练与推理管理的自动化服务接口",
     )
     app.include_router(training_router)
+    app.include_router(training_data_router)
     app.include_router(inference_router)
 
     @app.on_event("startup")
