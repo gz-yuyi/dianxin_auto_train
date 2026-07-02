@@ -38,7 +38,7 @@ Worker 会根据 `GPU_VISIBLE_DEVICES` / `CUDA_VISIBLE_DEVICES` / `ASCEND_RT_VIS
 无需 API 或 Celery worker，可直接使用 `train` 子命令进行本地训练；Payload 与 API 一致，默认不发送回调。
 
 ```bash
-echo '{"model_name_cn":"数研测试_扬言类别(全量数据-v3)","model_name_en":"test_yangyan6","training_data_file":"3_扬言_2025-12-03_06-42-31_2025-12-17_03-45-18_2025-12-17_03-46-16.xlsx","base_model":"/app/models/bert-base-chinese","hyperparameters":{"learning_rate":3.0E-5,"epochs":5,"batch_size":64,"max_sequence_length":512,"random_seed":1999,"train_val_split":0.2,"text_column":"文本内容","label_column":"标签列"},"callback_url":"http://10.196.193.98:8089/service"}' | uv run python main.py train --payload -
+echo '{"model_name_cn":"数研测试_扬言类别(全量数据-v3)","model_name_en":"test_yangyan6","training_data_file":"3_扬言_2025-12-03_06-42-31_2025-12-17_03-45-18_2025-12-17_03-46-16.xlsx","base_model":"/app/models/bert-base-chinese","hyperparameters":{"learning_rate":3.0E-5,"epochs":6,"batch_size":8,"max_sequence_length":512,"random_seed":42,"train_val_split":0.1,"text_column":"文本内容","label_column":"标签列"},"callback_url":"http://10.196.193.98:8089/service"}' | uv run python main.py train --payload -
 ```
 
 如需回调，添加 `--callback`：
@@ -47,24 +47,24 @@ echo '{"model_name_cn":"数研测试_扬言类别(全量数据-v3)","model_name_
 uv run python main.py train --payload-file payload.json --callback
 ```
 
-### LoRA（可选）
-要启用 LoRA（PEFT），在 `hyperparameters` 中加入 `lora` 配置：
+### LoRA（默认启用）
+未传 `lora` 或传 `null` 时默认启用 LoRA（PEFT）；如需全量训练，显式传 `"lora": {"enabled": false}`。可在 `hyperparameters` 中覆盖 LoRA 配置：
 
 ```json
 {
   "hyperparameters": {
     "lora": {
       "enabled": true,
-      "r": 8,
-      "lora_alpha": 16,
+      "r": 16,
+      "lora_alpha": 32,
       "lora_dropout": 0.1,
-      "target_modules": ["query", "value"]
+      "target_modules": ["query", "key", "value", "dense"]
     }
   }
 }
 ```
 
-启用 LoRA 时会输出 `<model_name_en>.lora` 目录与 `<model_name_en>.head.pt` 分类头（不会保存完整 `.pt` 权重）。推理时可用 `--lora-adapter` 指定 adapter 目录，或将其与 `.head.pt` 放在同一目录下。
+启用 LoRA 时会输出 `<model_name_en>.lora` 目录、`<model_name_en>.head.pt` 分类头与 `model_meta.json`（不会保存完整 `.pt` 权重）。推理时可用 `--lora-adapter` 指定 adapter 目录，或将其与 `.head.pt` 放在同一目录下。
 
 ### 使用 Docker 运行
 

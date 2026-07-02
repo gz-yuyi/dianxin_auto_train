@@ -37,6 +37,7 @@
   - LoRA adapter: `<model_dir>/<model_stem>.lora`
   - 分类头: `<model_dir>/<model_stem>.head.pt`
   - 标签映射: `<model_dir>/<model_stem>.head.pt.pkl`
+  - 模型元数据: `<model_dir>/model_meta.json`（新训练产物，用于声明分类池化/输出激活；旧模型缺失时按兼容逻辑加载）
 - `model_stem` 对应训练时的 `model_name_en`（去除 `.pt` 后缀）。
 - 如果 `model_id` 已存在，可返回 `status: "loaded"`（幂等加载）或覆盖加载（实现选其一）。
 

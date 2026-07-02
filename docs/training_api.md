@@ -41,25 +41,30 @@
     "base_model": "bert-base-chinese",
     "hyperparameters": {
         "learning_rate": 3e-5,
-        "epochs": 10,
-        "batch_size": 64,
+        "epochs": 6,
+        "batch_size": 8,
         "max_sequence_length": 512,
         "early_stopping_enabled": false,
         "early_stopping_patience": 3,
         "early_stopping_min_delta": 0.0,
         "early_stopping_metric": "val_accuracy",
         "random_seed": 42,
-        "train_val_split": 0.2,
+        "train_val_split": 0.1,
+        "stratified_split": true,
+        "anchor_samples_enabled": true,
+        "anchor_repeat": 15,
+        "classifier_pooling_strategy": "mean_cls",
+        "output_activation": "none",
         "text_column": "内容合并",
         "label_column": "标签列",
         "sheet_name": null,
         "validation_sheet_name": null,
         "lora": {
             "enabled": true,
-            "r": 8,
-            "lora_alpha": 16,
+            "r": 16,
+            "lora_alpha": 32,
             "lora_dropout": 0.1,
-            "target_modules": ["query", "value"]
+            "target_modules": ["query", "key", "value", "dense"]
         }
     },
     "callback_url": "http://example.com/training/callback"
@@ -68,7 +73,8 @@
 > `training_data_file` / `validation_data_file` 推荐填写上传接口返回的 `filename`，不需要传 `/app/data/...` 绝对路径。
 > `validation_data_file` 可选，提供时将使用该文件作为验证集并忽略 `train_val_split`。
 > `early_stopping_enabled` 仅在有验证集时生效；`early_stopping_metric` 支持 `val_accuracy`、`val_loss`、`f1_score`。
-> `lora` 为可选配置，启用后会使用 LoRA 训练；任务完成后 `artifacts` 会额外返回 `lora_adapter_path` 与 `classifier_head_path`。
+> `lora` 为可选配置；不传或传 `null` 时默认启用 LoRA。若需全量训练，请显式传 `"lora": {"enabled": false}`。任务完成后 `artifacts` 会额外返回 `lora_adapter_path`、`classifier_head_path` 与 `model_meta_path`。
+> 默认训练策略包含：标签字典序映射、分层训练/验证划分（失败自动回退）、标签锚点样本增强（每类标签文本重复 15 次）、`mean_cls` 池化与 raw logits 输出。
 
 **响应**:
 ```json
@@ -93,8 +99,8 @@
     "created_at": "2024-01-01T12:00:00Z",
     "started_at": "2024-01-01T12:01:00Z",
     "progress": {
-        "current_epoch": 8,
-        "total_epochs": 10,
+        "current_epoch": 5,
+        "total_epochs": 6,
         "progress_percentage": 80,
         "train_accuracy": 0.98,
         "train_loss": 0.02,

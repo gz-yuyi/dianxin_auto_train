@@ -41,6 +41,13 @@ _MODEL_LOAD_LOCK = threading.Lock()
 _PEFT_CONFIG_FILENAME = "adapter_config.json"
 _PEFT_METADATA_KEYS = {"peft_version"}
 _PEFT_COMPAT_ROOT = Path(tempfile.gettempdir()) / "dianxin_auto_train_peft_compat"
+_MODEL_META_FILENAME = "model_meta.json"
+DEFAULT_CLASSIFIER_POOLING_STRATEGY = "mean_cls"
+DEFAULT_OUTPUT_ACTIVATION = "none"
+LEGACY_CLASSIFIER_POOLING_STRATEGY = "pooler_or_mean"
+LEGACY_OUTPUT_ACTIVATION = "relu"
+VALID_CLASSIFIER_POOLING_STRATEGIES = {DEFAULT_CLASSIFIER_POOLING_STRATEGY, LEGACY_CLASSIFIER_POOLING_STRATEGY}
+VALID_OUTPUT_ACTIVATIONS = {DEFAULT_OUTPUT_ACTIVATION, LEGACY_OUTPUT_ACTIVATION}
 
 
 class InferenceModelStateError(RuntimeError):
@@ -63,10 +70,17 @@ def _hash_file(path: Path, digest) -> None:
     digest.update(b"\0")
 
 
-def _build_artifact_cache_key(adapter_path: Path, head_path: Path, label_mapping_path: Path) -> str:
+def _build_artifact_cache_key(
+    adapter_path: Path,
+    head_path: Path,
+    label_mapping_path: Path,
+    model_meta_path: Path | None = None,
+) -> str:
     digest = hashlib.sha256()
     for path in (head_path, label_mapping_path):
         _hash_file(path, digest)
+    if model_meta_path is not None and model_meta_path.exists():
+        _hash_file(model_meta_path, digest)
     for path in sorted(item for item in adapter_path.rglob("*") if item.is_file()):
         _hash_file(path, digest)
     return digest.hexdigest()
@@ -105,6 +119,29 @@ def _classifier_head_num_labels(state_dict: object, head_path: Path) -> int:
         if not hasattr(bias, "shape") or len(bias.shape) != 1 or int(bias.shape[0]) != num_labels:
             raise InferenceModelStateError(f"Classifier head {head_path} bias shape does not match weight shape")
     return num_labels
+
+
+def _load_model_meta(model_root: Path) -> tuple[Path | None, str, str]:
+    meta_path = model_root / _MODEL_META_FILENAME
+    if not meta_path.exists():
+        return None, LEGACY_CLASSIFIER_POOLING_STRATEGY, LEGACY_OUTPUT_ACTIVATION
+    try:
+        raw_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise InferenceModelStateError(f"Failed to read model metadata {meta_path}: {exc}") from exc
+    pooling_strategy = str(
+        raw_meta.get("classifier_pooling_strategy", DEFAULT_CLASSIFIER_POOLING_STRATEGY)
+    ).strip().lower()
+    output_activation = str(raw_meta.get("output_activation", DEFAULT_OUTPUT_ACTIVATION)).strip().lower()
+    if pooling_strategy not in VALID_CLASSIFIER_POOLING_STRATEGIES:
+        raise InferenceModelStateError(
+            f"Model metadata {meta_path} has unsupported classifier_pooling_strategy: {pooling_strategy}"
+        )
+    if output_activation not in VALID_OUTPUT_ACTIVATIONS:
+        raise InferenceModelStateError(
+            f"Model metadata {meta_path} has unsupported output_activation: {output_activation}"
+        )
+    return meta_path, pooling_strategy, output_activation
 
 
 def _is_noop_unsupported_peft_config(key: str, value: object, raw_config: dict) -> bool:
@@ -237,6 +274,8 @@ class AdapterState:
     label_to_id: dict[str, int]
     id_to_label: dict[int, str]
     cache_key: str
+    classifier_pooling_strategy: str = LEGACY_CLASSIFIER_POOLING_STRATEGY
+    output_activation: str = LEGACY_OUTPUT_ACTIVATION
     draining: bool = False
     active_batches: int = 0
     unload_event: threading.Event = field(default_factory=threading.Event)
@@ -250,22 +289,41 @@ class InferenceTextClassifier(nn.Module):
         self.dropout = nn.Dropout(0.5)
         self.relu = nn.ReLU()
         self.head: nn.Linear | None = None
+        self.pooling_strategy = LEGACY_CLASSIFIER_POOLING_STRATEGY
+        self.output_activation = LEGACY_OUTPUT_ACTIVATION
 
     def set_head(self, head: nn.Linear) -> None:
         self.head = head
+
+    def set_adapter_behavior(self, pooling_strategy: str, output_activation: str) -> None:
+        if pooling_strategy not in VALID_CLASSIFIER_POOLING_STRATEGIES:
+            raise InferenceModelStateError(f"Unsupported classifier_pooling_strategy: {pooling_strategy}")
+        if output_activation not in VALID_OUTPUT_ACTIVATIONS:
+            raise InferenceModelStateError(f"Unsupported output_activation: {output_activation}")
+        self.pooling_strategy = pooling_strategy
+        self.output_activation = output_activation
 
     def forward(self, input_ids, attention_mask):
         if self.head is None:
             raise RuntimeError("Classifier head is not set for current adapter")
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
-        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+        mask = attention_mask.unsqueeze(-1).type_as(outputs.last_hidden_state)
+        mean_output = (outputs.last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-6)
+        if self.pooling_strategy == DEFAULT_CLASSIFIER_POOLING_STRATEGY:
+            if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+                cls_output = outputs.pooler_output
+            else:
+                cls_output = outputs.last_hidden_state[:, 0, :]
+            pooled_output = 0.5 * mean_output + 0.5 * cls_output
+        elif hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
             pooled_output = outputs.pooler_output
         else:
-            mask = attention_mask.unsqueeze(-1).type_as(outputs.last_hidden_state)
-            pooled_output = (outputs.last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-6)
+            pooled_output = mean_output
         dropout_output = self.dropout(pooled_output)
         linear_output = self.head(dropout_output)
-        return self.relu(linear_output)
+        if self.output_activation == LEGACY_OUTPUT_ACTIVATION:
+            return self.relu(linear_output)
+        return linear_output
 
 
 class InferenceWorker:
@@ -461,6 +519,7 @@ class InferenceWorker:
             if adapter_name != active:
                 raise RuntimeError("PEFT adapter switching is not supported by this version")
         self._classifier.set_head(self._head_cache[adapter_id])
+        self._classifier.set_adapter_behavior(model_info.classifier_pooling_strategy, model_info.output_activation)
         return model_info
 
     def _run_batch(self, adapter_id: str, items: list[InferenceItem]) -> None:
@@ -813,7 +872,8 @@ class LoraInferenceManager:
                 f"Classifier head {head_path} outputs {head_num_labels} labels, "
                 f"but label mapping contains {len(id_to_label)}"
             )
-        cache_key = _build_artifact_cache_key(adapter_path, head_path, label_mapping_path)
+        model_meta_path, classifier_pooling_strategy, output_activation = _load_model_meta(model_root)
+        cache_key = _build_artifact_cache_key(adapter_path, head_path, label_mapping_path, model_meta_path)
         return AdapterState(
             model_id=model_id,
             adapter_path=adapter_path,
@@ -823,6 +883,8 @@ class LoraInferenceManager:
             label_to_id=label_to_id,
             id_to_label=id_to_label,
             cache_key=cache_key,
+            classifier_pooling_strategy=classifier_pooling_strategy,
+            output_activation=output_activation,
         )
 
 

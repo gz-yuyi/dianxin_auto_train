@@ -1,3 +1,4 @@
+import json
 import os
 import pickle
 from pathlib import Path
@@ -28,11 +29,20 @@ from src.device_utils import (
 )
 
 
+DEFAULT_LORA_TARGET_MODULES = ["query", "key", "value", "dense"]
+DEFAULT_CLASSIFIER_POOLING_STRATEGY = "mean_cls"
+DEFAULT_OUTPUT_ACTIVATION = "none"
+LEGACY_CLASSIFIER_POOLING_STRATEGY = "pooler_or_mean"
+LEGACY_OUTPUT_ACTIVATION = "relu"
+VALID_CLASSIFIER_POOLING_STRATEGIES = {DEFAULT_CLASSIFIER_POOLING_STRATEGY, LEGACY_CLASSIFIER_POOLING_STRATEGY}
+VALID_OUTPUT_ACTIVATIONS = {DEFAULT_OUTPUT_ACTIVATION, LEGACY_OUTPUT_ACTIVATION}
+
+
 class TextClassificationDataset(Dataset):
     def __init__(self, dataframe: pd.DataFrame, tokenizer: AutoTokenizer, text_column: str, label_column: str, max_length: int):
         self.texts = [
             tokenizer(
-                text,
+                str(text),
                 padding="max_length",
                 max_length=max_length,
                 truncation=True,
@@ -57,8 +67,16 @@ class TextClassifier(nn.Module):
         lora_config: dict | None = None,
         base_model_instance: nn.Module | None = None,
         torch_dtype: torch.dtype | None = None,
+        pooling_strategy: str = DEFAULT_CLASSIFIER_POOLING_STRATEGY,
+        output_activation: str = DEFAULT_OUTPUT_ACTIVATION,
     ):
         super().__init__()
+        if pooling_strategy not in VALID_CLASSIFIER_POOLING_STRATEGIES:
+            raise ValueError(f"Unsupported pooling_strategy: {pooling_strategy}")
+        if output_activation not in VALID_OUTPUT_ACTIVATIONS:
+            raise ValueError(f"Unsupported output_activation: {output_activation}")
+        self.pooling_strategy = pooling_strategy
+        self.output_activation = output_activation
         self.use_lora = lora_config is not None
         if base_model_instance is not None:
             self.bert = base_model_instance
@@ -75,14 +93,23 @@ class TextClassifier(nn.Module):
 
     def forward(self, input_ids, attention_mask):
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
-        if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+        mask = attention_mask.unsqueeze(-1).type_as(outputs.last_hidden_state)
+        mean_output = (outputs.last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-6)
+        if self.pooling_strategy == "mean_cls":
+            if hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+                cls_output = outputs.pooler_output
+            else:
+                cls_output = outputs.last_hidden_state[:, 0, :]
+            pooled_output = 0.5 * mean_output + 0.5 * cls_output
+        elif hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
             pooled_output = outputs.pooler_output
         else:
-            mask = attention_mask.unsqueeze(-1).type_as(outputs.last_hidden_state)
-            pooled_output = (outputs.last_hidden_state * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-6)
+            pooled_output = mean_output
         dropout_output = self.dropout(pooled_output)
         linear_output = self.linear(dropout_output)
-        return self.relu(linear_output)
+        if self.output_activation == "relu":
+            return self.relu(linear_output)
+        return linear_output
 
 
 def resolve_dataset_path(filename: str) -> Path:
@@ -94,16 +121,27 @@ def resolve_dataset_path(filename: str) -> Path:
 
 def normalize_lora_config(hp: dict) -> dict | None:
     raw = hp.get("lora")
-    if not raw or not raw.get("enabled", False):
+    # LoRA is the online-publishable training mode. Treat missing/null LoRA
+    # config as the optimized default; callers can still disable it explicitly
+    # with {"lora": {"enabled": false}}.
+    if raw is None:
+        raw = {"enabled": True}
+    elif hasattr(raw, "model_dump"):
+        raw = raw.model_dump()
+    elif not isinstance(raw, dict):
+        raw = dict(raw)
+    elif not raw:
+        raw = {"enabled": True}
+    if not raw.get("enabled", False):
         return None
-    target_modules = raw.get("target_modules") or ["query", "value"]
+    target_modules = raw.get("target_modules") or DEFAULT_LORA_TARGET_MODULES
     if isinstance(target_modules, str):
         target_modules_value: list[str] | str = target_modules
     else:
         target_modules_value = list(target_modules)
     return {
-        "r": int(raw.get("r", 8)),
-        "lora_alpha": float(raw.get("lora_alpha", 16)),
+        "r": int(raw.get("r", 16)),
+        "lora_alpha": float(raw.get("lora_alpha", 32)),
         "lora_dropout": float(raw.get("lora_dropout", 0.1)),
         "target_modules": target_modules_value,
         "bias": "none",
@@ -112,7 +150,7 @@ def normalize_lora_config(hp: dict) -> dict | None:
 
 def configure_lora_trainables(model: TextClassifier) -> None:
     for name, param in model.bert.named_parameters():
-        param.requires_grad = "lora_" in name
+        param.requires_grad = any(token in name.lower() for token in ("lora_", "modules_to_save"))
     for param in model.linear.parameters():
         param.requires_grad = True
 
@@ -167,8 +205,8 @@ def prepare_dataframe(
     labels = dataframe[label_column].astype(str)
     dataframe[label_column] = labels
     if label_to_id is None:
-        # Align with legacy/Bert_Train_Sample_V1.py: keep appearance order (no sorting).
-        unique_labels = list(labels.unique())
+        # Keep mapping stable across repeated trainings with the same label set.
+        unique_labels = sorted(list(labels.unique()))
         label_to_id = {label: idx for idx, label in enumerate(unique_labels)}
     else:
         unknown = sorted(set(labels.unique()) - set(label_to_id.keys()))
@@ -187,8 +225,7 @@ def build_dataloaders(
     label_column: str,
     validation_dataframe: pd.DataFrame | None = None,
 ) -> tuple[DataLoader, DataLoader, int]:
-    # Align with legacy/Bert_Train_Sample_V1.py: dataset split uses a fixed random_state=42
-    # (independent from training random seed).
+    # Dataset split uses a fixed random_state=42 (independent from training random seed).
     if validation_dataframe is not None:
         train_df = dataframe
         dev_df = validation_dataframe
@@ -196,24 +233,94 @@ def build_dataloaders(
         train_df = dataframe
         dev_df = dataframe.iloc[0:0]
     else:
-        train_df, holdout_df = train_test_split(
-            dataframe,
-            test_size=hp["train_val_split"],
-            stratify=None,
-            random_state=42,
-        )
-        dev_df, _ = train_test_split(
-            holdout_df,
-            test_size=0.5,
-            stratify=None,
-            random_state=42,
-        )
+        use_stratify = bool(hp.get("stratified_split", True))
+        try:
+            train_df, holdout_df = train_test_split(
+                dataframe,
+                test_size=hp["train_val_split"],
+                stratify=dataframe[label_column] if use_stratify else None,
+                random_state=42,
+            )
+            dev_df, _ = train_test_split(
+                holdout_df,
+                test_size=0.5,
+                stratify=holdout_df[label_column] if use_stratify else None,
+                random_state=42,
+            )
+        except ValueError as exc:
+            if not use_stratify:
+                raise
+            logger.warning("Stratified train/validation split failed ({}); falling back to unstratified split", exc)
+            train_df, holdout_df = train_test_split(
+                dataframe,
+                test_size=hp["train_val_split"],
+                stratify=None,
+                random_state=42,
+            )
+            dev_df, _ = train_test_split(
+                holdout_df,
+                test_size=0.5,
+                stratify=None,
+                random_state=42,
+            )
 
     train_dataset = TextClassificationDataset(train_df, tokenizer, text_column, label_column, hp["max_sequence_length"])
     dev_dataset = TextClassificationDataset(dev_df, tokenizer, text_column, label_column, hp["max_sequence_length"])
     train_loader = DataLoader(train_dataset, batch_size=hp["batch_size"], shuffle=True)
     dev_loader = DataLoader(dev_dataset, batch_size=hp["batch_size"])
     return train_loader, dev_loader, len(dev_dataset)
+
+
+def augment_with_label_anchor_samples(
+    dataframe: pd.DataFrame,
+    label_to_id: dict[str, int],
+    hp: dict,
+    text_column: str,
+    label_column: str,
+) -> pd.DataFrame:
+    if not bool(hp.get("anchor_samples_enabled", True)):
+        return dataframe
+    repeat = int(hp.get("anchor_repeat", 15))
+    if repeat <= 0 or not label_to_id:
+        return dataframe
+    anchor_df = pd.DataFrame(
+        {
+            text_column: list(label_to_id.keys()),
+            label_column: list(label_to_id.values()),
+        }
+    )
+    anchor_df = pd.concat([anchor_df] * repeat, ignore_index=True)
+    logger.info(
+        "Adding {} label anchor samples ({} labels x repeat {})",
+        len(anchor_df),
+        len(label_to_id),
+        repeat,
+    )
+    return pd.concat([dataframe, anchor_df], ignore_index=True)
+
+
+def normalize_classifier_pooling_strategy(hp: dict) -> str:
+    value = str(hp.get("classifier_pooling_strategy", DEFAULT_CLASSIFIER_POOLING_STRATEGY)).strip().lower()
+    if value not in VALID_CLASSIFIER_POOLING_STRATEGIES:
+        logger.warning(
+            "Unsupported classifier_pooling_strategy {}; falling back to {}",
+            value,
+            DEFAULT_CLASSIFIER_POOLING_STRATEGY,
+        )
+        return DEFAULT_CLASSIFIER_POOLING_STRATEGY
+    return value
+
+
+def normalize_output_activation(hp: dict) -> str:
+    value = str(hp.get("output_activation", DEFAULT_OUTPUT_ACTIVATION)).strip().lower()
+    if value not in VALID_OUTPUT_ACTIVATIONS:
+        logger.warning(
+            "Unsupported output_activation {}; falling back to {}",
+            value,
+            DEFAULT_OUTPUT_ACTIVATION,
+        )
+        return DEFAULT_OUTPUT_ACTIVATION
+    return value
 
 
 def save_label_mappings(mapping_path: Path, label_to_id: dict[str, int], id_to_label: dict[int, str]) -> None:
@@ -232,6 +339,8 @@ def run_training_loop(
     hp = request_payload["hyperparameters"]
     callback_url = request_payload.get("callback_url")
     lora_config = normalize_lora_config(hp)
+    classifier_pooling_strategy = normalize_classifier_pooling_strategy(hp)
+    output_activation = normalize_output_activation(hp)
 
     logger.info("Starting training task {}", task_id)
 
@@ -241,6 +350,13 @@ def run_training_loop(
         sheet_name=hp.get("sheet_name"),
         text_column=hp["text_column"],
         label_column=hp["label_column"],
+    )
+    dataframe = augment_with_label_anchor_samples(
+        dataframe,
+        label_to_id,
+        hp,
+        hp["text_column"],
+        hp["label_column"],
     )
     validation_dataframe = None
     validation_file = request_payload.get("validation_data_file")
@@ -274,6 +390,7 @@ def run_training_loop(
     model_stem = model_name_en[:-3] if model_name_en.endswith(".pt") else model_name_en
     model_filename = f"{model_stem}.pt"
     best_model_path = output_dir / model_filename
+    model_meta_path = output_dir / "model_meta.json"
     lora_adapter_path = None
     classifier_head_path = None
     if lora_config is None:
@@ -301,21 +418,36 @@ def run_training_loop(
     else:
         torch_dtype = None
 
+    def save_model_meta() -> None:
+        payload = {
+            "format_version": 2,
+            "model_name_en": model_name_en,
+            "lora_enabled": lora_config is not None,
+            "classifier_pooling_strategy": classifier_pooling_strategy,
+            "output_activation": output_activation,
+            "label_mapping_path": str(label_mapping_path),
+        }
+        model_meta_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
     def save_model_artifacts() -> None:
         if lora_config is None:
             torch.save(model.state_dict(), best_model_path)
+            save_model_meta()
             return
         if lora_adapter_path is None or classifier_head_path is None:
             raise RuntimeError("LoRA paths were not initialized")
         lora_adapter_path.mkdir(parents=True, exist_ok=True)
         model.bert.save_pretrained(lora_adapter_path)
         torch.save(model.linear.state_dict(), classifier_head_path)
+        save_model_meta()
 
     model = TextClassifier(
         request_payload["base_model"],
         output_dim=len(label_to_id),
         lora_config=lora_config,
         torch_dtype=torch_dtype,
+        pooling_strategy=classifier_pooling_strategy,
+        output_activation=output_activation,
     )
     model = model.to(device)
     if lora_config is not None:
@@ -356,6 +488,7 @@ def run_training_loop(
         result = {
             "status": status,
             "label_mapping_path": str(label_mapping_path),
+            "model_meta_path": str(model_meta_path),
             "lora_enabled": lora_config is not None,
         }
         if lora_config is None:

@@ -142,6 +142,8 @@ def start_training_task(self, task_id: str) -> dict:
         artifacts = {
             "label_mapping_path": result["label_mapping_path"],
         }
+        if result.get("model_meta_path"):
+            artifacts["model_meta_path"] = result["model_meta_path"]
         if result.get("lora_enabled"):
             artifacts["lora_adapter_path"] = result["lora_adapter_path"]
             artifacts["classifier_head_path"] = result["classifier_head_path"]

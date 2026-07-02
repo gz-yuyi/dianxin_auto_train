@@ -4,12 +4,12 @@ from pydantic import BaseModel, Field, HttpUrl
 
 
 class LoraConfig(BaseModel):
-    enabled: bool = Field(False, title="是否启用 LoRA", description="是否启用 LoRA 微调")
-    r: int = Field(8, ge=1, title="LoRA 秩", description="LoRA 分解秩")
-    lora_alpha: float = Field(16, gt=0, title="LoRA Alpha", description="LoRA 缩放系数")
+    enabled: bool = Field(True, title="是否启用 LoRA", description="是否启用 LoRA 微调")
+    r: int = Field(16, ge=1, title="LoRA 秩", description="LoRA 分解秩")
+    lora_alpha: float = Field(32, gt=0, title="LoRA Alpha", description="LoRA 缩放系数")
     lora_dropout: float = Field(0.1, ge=0.0, lt=1.0, title="LoRA Dropout", description="LoRA Dropout 比例")
     target_modules: list[str] | str = Field(
-        default_factory=lambda: ["query", "value"],
+        default_factory=lambda: ["query", "key", "value", "dense"],
         title="目标模块",
         description="LoRA 注入的目标模块名称，或填写 'all-linear'",
     )
@@ -17,8 +17,8 @@ class LoraConfig(BaseModel):
 
 class HyperParameters(BaseModel):
     learning_rate: float = Field(3e-5, title="学习率", description="优化器学习率")
-    epochs: int = Field(5, ge=1, title="训练轮数", description="训练总轮数")
-    batch_size: int = Field(64, ge=1, title="批大小", description="训练批大小")
+    epochs: int = Field(6, ge=1, title="训练轮数", description="训练总轮数")
+    batch_size: int = Field(8, ge=1, title="批大小", description="训练批大小")
     max_sequence_length: int = Field(512, ge=8, title="最大序列长度", description="输入文本的最大 Token 长度")
     precision: str = Field("fp32", title="训练精度", description="训练精度，可选 fp32、fp16 或 bf16")
     gradient_accumulation_steps: int = Field(1, ge=1, title="梯度累积步数", description="梯度累积的步数")
@@ -30,13 +30,18 @@ class HyperParameters(BaseModel):
         title="早停指标",
         description="Early Stopping 使用的指标，可选 val_accuracy、val_loss、f1_score",
     )
-    random_seed: int = Field(1999, title="随机种子", description="用于复现结果的随机种子")
-    train_val_split: float = Field(0.2, ge=0.0, lt=1.0, title="验证集划分比例", description="从训练集划分验证集的比例，0 表示不划分")
+    random_seed: int = Field(42, title="随机种子", description="用于复现结果的随机种子")
+    train_val_split: float = Field(0.1, ge=0.0, lt=1.0, title="验证集划分比例", description="从训练集划分验证集的比例，0 表示不划分")
+    stratified_split: bool = Field(True, title="是否分层划分", description="是否按标签分层划分训练/验证集，失败时自动回退为普通划分")
+    anchor_samples_enabled: bool = Field(True, title="是否启用标签锚点样本", description="是否将标签文本作为锚点样本加入训练集")
+    anchor_repeat: int = Field(15, ge=0, title="标签锚点重复次数", description="每个标签锚点样本重复加入训练集的次数")
+    classifier_pooling_strategy: str = Field("mean_cls", title="分类池化策略", description="分类头输入池化策略，可选 mean_cls、pooler_or_mean")
+    output_activation: str = Field("none", title="输出激活", description="分类 logits 输出激活，可选 none、relu")
     text_column: str = Field(..., title="文本列名", description="数据集中存放文本内容的列名")
     label_column: str = Field(..., title="标签列名", description="数据集中存放标签的列名")
     sheet_name: str | None = Field(None, title="训练集工作表名", description="当输入文件为 Excel 时使用的工作表名称")
     validation_sheet_name: str | None = Field(None, title="验证集工作表名", description="验证集 Excel 文件使用的工作表名称")
-    lora: LoraConfig | None = Field(None, title="LoRA 配置", description="可选的 LoRA 微调配置")
+    lora: LoraConfig | None = Field(default_factory=LoraConfig, title="LoRA 配置", description="可选的 LoRA 微调配置；传 {enabled:false} 可关闭 LoRA")
 
 
 class TrainingTaskCreateRequest(BaseModel):
