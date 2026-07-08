@@ -140,6 +140,8 @@ def start_training_task(self, task_id: str) -> dict:
 
     if status == "completed":
         artifacts = {
+            "model_id": result.get("model_id"),
+            "model_dir": result.get("model_dir"),
             "label_mapping_path": result["label_mapping_path"],
         }
         if result.get("model_meta_path"):

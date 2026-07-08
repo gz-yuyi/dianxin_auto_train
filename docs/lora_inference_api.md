@@ -14,19 +14,19 @@
 **请求参数**:
 ```json
 {
-    "model_dir": "local-fc525ca520d745daa38c0dd0fdd0c5d7",
+    "model_dir": "environmental_pollution_classifier",
     "max_length": 512
 }
 ```
 
 **参数说明**:
-- `model_dir`: 模型目录名称（训练任务输出目录名）
+- `model_dir`: 模型目录名称（训练时的 `model_name_en`，如传入 `.pt` 后缀则去除）
 - `max_length`: 推理最大长度（可选，默认 512）
 
 **响应**:
 ```json
 {
-    "model_id": "local-fc525ca520d745daa38c0dd0fdd0c5d7",
+    "model_id": "environmental_pollution_classifier",
     "status": "loaded",
     "message": "model loaded"
 }
@@ -44,26 +44,26 @@
 ### 2. 发布 LoRA 模型
 **POST** `/inference/models/publish`
 
-将 `artifacts/<model_id>` 下的 LoRA 训练产物发布为可预测状态。该接口是业务语义上的发布接口，内部会复用模型加载逻辑；在网关模式下会广播到所有推理上游。
+将 `artifacts/<model_id>` 下的 LoRA 训练产物发布为可预测状态。`model_id` 默认就是训练请求中的英文模型名 `model_name_en`（如传入 `.pt` 后缀则去除），不是训练任务/算法 ID。该接口是业务语义上的发布接口，内部会复用模型加载逻辑；在网关模式下会广播到所有推理上游。
 
 **请求参数**:
 ```json
 {
-    "model_id": "local-fc525ca520d745daa38c0dd0fdd0c5d7",
+    "model_id": "environmental_pollution_classifier",
     "max_length": 512,
     "reload": true
 }
 ```
 
 **参数说明**:
-- `model_id`: 模型目录名称，对应 `artifacts/<model_id>`。
+- `model_id`: 模型目录名称，对应 `artifacts/<model_id>`；通常填写训练时的英文模型名。
 - `max_length`: 推理最大长度（可选，默认 512）。
 - `reload`: 模型已加载时是否重新读取磁盘产物并刷新显存缓存（可选，默认 true）。
 
 **响应**:
 ```json
 {
-    "model_id": "local-fc525ca520d745daa38c0dd0fdd0c5d7",
+    "model_id": "environmental_pollution_classifier",
     "status": "loaded",
     "message": "model published"
 }

@@ -38,6 +38,13 @@ VALID_CLASSIFIER_POOLING_STRATEGIES = {DEFAULT_CLASSIFIER_POOLING_STRATEGY, LEGA
 VALID_OUTPUT_ACTIVATIONS = {DEFAULT_OUTPUT_ACTIVATION, LEGACY_OUTPUT_ACTIVATION}
 
 
+def normalize_model_stem(model_name_en: str) -> str:
+    model_stem = model_name_en[:-3] if model_name_en.endswith(".pt") else model_name_en
+    if not model_stem or model_stem in {".", ".."} or "/" in model_stem or "\\" in model_stem:
+        raise ValueError("model_name_en must be a plain model name without path separators")
+    return model_stem
+
+
 class TextClassificationDataset(Dataset):
     def __init__(self, dataframe: pd.DataFrame, tokenizer: AutoTokenizer, text_column: str, label_column: str, max_length: int):
         self.texts = [
@@ -380,14 +387,17 @@ def run_training_loop(
         validation_dataframe=validation_dataframe,
     )
 
-    output_dir = get_model_output_dir() / task_id
+    # Artifacts are stored under the model English name so inference publish/list
+    # use business-visible model IDs instead of training task/algorithm IDs.
+    model_name_en = request_payload["model_name_en"]
+    model_stem = normalize_model_stem(model_name_en)
+    output_dir = get_model_output_dir() / model_stem
     output_dir.mkdir(parents=True, exist_ok=True)
     # Artifacts naming convention:
+    # - output directory: <model_stem> (model_name_en without optional .pt suffix)
     # - full model weights: <name>.pt (full fine-tune only)
     # - LoRA adapter: <name>.lora (directory) + classifier head: <name>.head.pt
     # - label mappings: <weights>.pkl
-    model_name_en = request_payload["model_name_en"]
-    model_stem = model_name_en[:-3] if model_name_en.endswith(".pt") else model_name_en
     model_filename = f"{model_stem}.pt"
     best_model_path = output_dir / model_filename
     model_meta_path = output_dir / "model_meta.json"
@@ -421,6 +431,7 @@ def run_training_loop(
     def save_model_meta() -> None:
         payload = {
             "format_version": 2,
+            "model_id": model_stem,
             "model_name_en": model_name_en,
             "lora_enabled": lora_config is not None,
             "classifier_pooling_strategy": classifier_pooling_strategy,
@@ -487,6 +498,8 @@ def run_training_loop(
     def build_result(status: str) -> dict:
         result = {
             "status": status,
+            "model_id": model_stem,
+            "model_dir": str(output_dir),
             "label_mapping_path": str(label_mapping_path),
             "model_meta_path": str(model_meta_path),
             "lora_enabled": lora_config is not None,
@@ -649,4 +662,4 @@ def run_training_loop(
     return result
 
 
-__all__ = ["run_training_loop"]
+__all__ = ["normalize_model_stem", "run_training_loop"]

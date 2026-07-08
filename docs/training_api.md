@@ -73,7 +73,7 @@
 > `training_data_file` / `validation_data_file` 推荐填写上传接口返回的 `filename`，不需要传 `/app/data/...` 绝对路径。
 > `validation_data_file` 可选，提供时将使用该文件作为验证集并忽略 `train_val_split`。
 > `early_stopping_enabled` 仅在有验证集时生效；`early_stopping_metric` 支持 `val_accuracy`、`val_loss`、`f1_score`。
-> `lora` 为可选配置；不传或传 `null` 时默认启用 LoRA。若需全量训练，请显式传 `"lora": {"enabled": false}`。任务完成后 `artifacts` 会额外返回 `lora_adapter_path`、`classifier_head_path` 与 `model_meta_path`。
+> `lora` 为可选配置；不传或传 `null` 时默认启用 LoRA。若需全量训练，请显式传 `"lora": {"enabled": false}`。训练产物目录使用 `model_name_en`（如传入 `.pt` 后缀则去除），任务完成后 `artifacts` 会返回 `model_id`、`model_dir`，并额外返回 `lora_adapter_path`、`classifier_head_path` 与 `model_meta_path`。
 > 默认训练策略包含：标签字典序映射、分层训练/验证划分（失败自动回退）、标签锚点样本增强（每类标签文本重复 15 次）、`mean_cls` 池化与 raw logits 输出。
 
 **响应**:

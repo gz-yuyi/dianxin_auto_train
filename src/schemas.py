@@ -122,7 +122,7 @@ class DeleteTaskResponse(BaseModel):
 
 
 class LoraModelLoadRequest(BaseModel):
-    model_dir: str = Field(..., title="模型目录", description="待加载模型所在目录")
+    model_dir: str = Field(..., title="模型目录", description="待加载模型所在目录；通常为训练时的 model_name_en")
     max_length: int = Field(512, ge=8, title="最大长度", description="推理时允许的最大 Token 长度")
 
 
@@ -133,7 +133,7 @@ class LoraModelLoadResponse(BaseModel):
 
 
 class LoraModelPublishRequest(BaseModel):
-    model_id: str = Field(..., min_length=1, title="模型 ID", description="待发布模型的目录名/模型 ID，对应 artifacts/<model_id>")
+    model_id: str = Field(..., min_length=1, title="模型 ID", description="待发布模型的目录名/模型 ID，对应 artifacts/<model_id>；通常为训练时的 model_name_en")
     max_length: int = Field(512, ge=8, title="最大长度", description="推理时允许的最大 Token 长度")
     reload: bool = Field(True, title="是否重新发布", description="模型已加载时是否重新读取磁盘产物并刷新显存缓存")
 

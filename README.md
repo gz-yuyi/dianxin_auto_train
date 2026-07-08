@@ -64,7 +64,7 @@ uv run python main.py train --payload-file payload.json --callback
 }
 ```
 
-启用 LoRA 时会输出 `<model_name_en>.lora` 目录、`<model_name_en>.head.pt` 分类头与 `model_meta.json`（不会保存完整 `.pt` 权重）。推理时可用 `--lora-adapter` 指定 adapter 目录，或将其与 `.head.pt` 放在同一目录下。
+启用 LoRA 时会在 `artifacts/<model_stem>` 下输出 `<model_stem>.lora` 目录、`<model_stem>.head.pt` 分类头与 `model_meta.json`（`model_stem` 为英文模型名去掉可选 `.pt` 后缀；不会保存完整 `.pt` 权重）。推理时可用 `--lora-adapter` 指定 adapter 目录，或将其与 `.head.pt` 放在同一目录下。
 
 ### 使用 Docker 运行
 
@@ -148,8 +148,8 @@ uv run python main.py train --payload-file payload.json --callback
 ### LoRA 推理服务
 提供 LoRA 专用推理 API（基座模型共享、按模型目录加载 adapter）。详见 `docs/lora_inference_api.md`。
 
-- 模型目录：训练输出目录名（例如 `artifacts/<task_id>`）。
-- 命名规则：`<model_name_en>.lora` 与 `<model_name_en>.head.pt` 位于该目录。
+- 模型目录：训练输出目录名使用英文模型名（例如 `artifacts/<model_name_en>`，若传入 `.pt` 后缀会去除）。
+- 命名规则：`<model_stem>.lora` 与 `<model_stem>.head.pt` 位于该目录（`model_stem` 为英文模型名去掉可选 `.pt` 后缀）。
 - 主要接口：`POST /inference/models/publish`（发布为可预测状态）、`POST /inference/models/load`、`POST /inference/predict`、`POST /inference/models/unload`。
 - Worker 设置：`INFERENCE_BASE_MODEL`、`INFERENCE_WORKERS_PER_GPU`、`INFERENCE_MAX_BATCH_SIZE`。
 
@@ -165,8 +165,8 @@ uv run python main.py train --payload-file payload.json --callback
   uv run python inference.py multi-class \
     --excel legacy/环境保护_空气污染--样例1000.xlsx \
     --text-column 内容合并 \
-    --model-path artifacts/<task_id>/<model_name>.pt \
-    --label-mapping artifacts/<task_id>/<model_name>.pt.pkl \
+    --model-path artifacts/<model_name_en>/<model_name>.pt \
+    --label-mapping artifacts/<model_name_en>/<model_name>.pt.pkl \
     --base-model bert-base-chinese \
     --max-length 512 \
     --top-n 3 \
@@ -176,16 +176,16 @@ uv run python main.py train --payload-file payload.json --callback
   ```bash
   uv run python inference.py single-judge \
     --excel <input>.xlsx --text-column 内容合并 --label-column 标签列 \
-    --model-path artifacts/<task_id>/<model_name>.pt \
-    --label-mapping artifacts/<task_id>/<model_name>.pt.pkl \
+    --model-path artifacts/<model_name_en>/<model_name>.pt \
+    --label-mapping artifacts/<model_name_en>/<model_name>.pt.pkl \
     --top-k 2 --threshold 0.4
   ```
 - 多标签判断（按列名前缀匹配多个标签列，如 `label_1`, `label_2`）：
   ```bash
   uv run python inference.py multi-judge \
     --excel <input>.xlsx --text-column 内容合并 --label-prefix label_ \
-    --model-path artifacts/<task_id>/<model_name>.pt \
-    --label-mapping artifacts/<task_id>/<model_name>.pt.pkl \
+    --model-path artifacts/<model_name_en>/<model_name>.pt \
+    --label-mapping artifacts/<model_name_en>/<model_name>.pt.pkl \
     --top-k 2 --threshold 0.4
   ```
 

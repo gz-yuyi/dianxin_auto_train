@@ -76,7 +76,7 @@ def load_lora_model(payload: LoraModelLoadRequest) -> LoraModelLoadResponse:
     "/models/publish",
     response_model=LoraModelPublishResponse,
     summary="发布模型",
-    description="将 artifacts 下指定模型目录发布为可预测状态；已加载模型可重新读取磁盘产物并刷新显存缓存。",
+    description="将 artifacts 下指定模型目录发布为可预测状态；目录名通常为训练时的模型英文名；已加载模型可重新读取磁盘产物并刷新显存缓存。",
     response_description="模型发布结果",
 )
 def publish_lora_model(payload: LoraModelPublishRequest) -> LoraModelPublishResponse:
