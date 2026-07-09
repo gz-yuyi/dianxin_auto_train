@@ -551,8 +551,8 @@ def run_training_loop(
             total_loss_train += loss_value * labels.size(0)
             sample_count_train += labels.size(0)
             
-            # Calculate batch progress within current epoch
-            batch_progress = float((batch_idx + 1) * 100.0 / total_batches)
+            # Calculate overall progress across all epochs for polling clients.
+            batch_progress = float(((epoch_index * total_batches) + batch_idx + 1) * 100.0 / (total_epochs * total_batches))
             batch_metrics = {
                 "epoch": epoch_index + 1,
                 "total_epochs": total_epochs,
@@ -607,7 +607,7 @@ def run_training_loop(
             "val_accuracy": val_accuracy,
             "val_loss": val_loss,
             "f1_score": f1,
-            "progress_percentage": 100.0,  # Epoch is complete, so progress within epoch is 100%
+            "progress_percentage": float((epoch_index + 1) * 100.0 / total_epochs),
             "callback_url": callback_url,
         }
         logger.info(

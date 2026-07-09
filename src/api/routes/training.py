@@ -110,6 +110,7 @@ def serialize_detail(record: dict) -> TrainingTaskDetail:
         completed_at=record.get("completed_at"),
         updated_at=record["updated_at"],
         progress=serialize_progress(record.get("progress")),
+        epoch_metrics=record.get("epoch_metrics") or [],
         error_message=record.get("error_message"),
         artifacts=record.get("artifacts"),
     )
@@ -150,6 +151,7 @@ def create_training_task(payload: TrainingTaskCreateRequest) -> TrainingTaskResp
         "completed_at": None,
         "updated_at": created_at,
         "progress": None,
+        "epoch_metrics": [],
         "error_message": None,
         "artifacts": None,
         "request_payload": request_data,

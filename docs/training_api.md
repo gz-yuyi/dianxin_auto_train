@@ -101,15 +101,42 @@
     "progress": {
         "current_epoch": 5,
         "total_epochs": 6,
-        "progress_percentage": 80,
+        "current_batch": null,
+        "total_batches": null,
+        "progress_percentage": 83.33,
         "train_accuracy": 0.98,
         "train_loss": 0.02,
         "val_accuracy": 0.95,
-        "val_loss": 0.05
+        "val_loss": 0.05,
+        "f1_score": 0.94
     },
+    "epoch_metrics": [
+        {
+            "epoch": 1,
+            "total_epochs": 6,
+            "train_accuracy": 0.90,
+            "train_loss": 0.30,
+            "val_accuracy": 0.88,
+            "val_loss": 0.35,
+            "f1_score": 0.87,
+            "progress_percentage": 16.67
+        },
+        {
+            "epoch": 2,
+            "total_epochs": 6,
+            "train_accuracy": 0.93,
+            "train_loss": 0.20,
+            "val_accuracy": 0.91,
+            "val_loss": 0.25,
+            "f1_score": 0.90,
+            "progress_percentage": 33.33
+        }
+    ],
     "error_message": null
 }
 ```
+> `progress` 表示当前/最近一次训练进度；任务完成后会保留最后一轮的准确率、损失率与 F1，不再置空。
+> `epoch_metrics` 为每轮结束时追加的历史指标数组，前端轮询任务详情即可获取每一轮的准确率和损失率。
 
 ### 4. 获取任务列表
 **GET** `/training/tasks`

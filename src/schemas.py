@@ -71,6 +71,18 @@ class TaskProgress(BaseModel):
     train_loss: float | None = Field(None, title="训练损失", description="当前训练损失")
     val_accuracy: float | None = Field(None, title="验证准确率", description="当前验证准确率")
     val_loss: float | None = Field(None, title="验证损失", description="当前验证损失")
+    f1_score: float | None = Field(None, title="F1 分数", description="当前验证集 macro F1 分数")
+
+
+class EpochMetrics(BaseModel):
+    epoch: int = Field(..., title="轮次", description="训练 epoch 序号，从 1 开始")
+    total_epochs: int | None = Field(None, title="总轮次", description="训练总 epoch 数")
+    train_accuracy: float | None = Field(None, title="训练准确率", description="该轮训练准确率")
+    train_loss: float | None = Field(None, title="训练损失", description="该轮训练损失")
+    val_accuracy: float | None = Field(None, title="验证准确率", description="该轮验证准确率")
+    val_loss: float | None = Field(None, title="验证损失", description="该轮验证损失")
+    f1_score: float | None = Field(None, title="F1 分数", description="该轮验证集 macro F1 分数")
+    progress_percentage: float | None = Field(None, title="进度百分比", description="该轮完成后的进度百分比")
 
 
 class TrainingTaskResponse(BaseModel):
@@ -90,6 +102,7 @@ class TrainingTaskDetail(BaseModel):
     completed_at: str | None = Field(None, title="完成时间", description="任务完成时间")
     updated_at: str = Field(..., title="更新时间", description="任务最近更新时间")
     progress: TaskProgress | None = Field(None, title="进度信息", description="训练进度详情")
+    epoch_metrics: list[EpochMetrics] = Field(default_factory=list, title="每轮指标", description="每个 epoch 结束后的准确率、损失率等指标")
     error_message: str | None = Field(None, title="错误信息", description="任务失败时的错误信息")
     artifacts: dict[str, Any] | None = Field(None, title="产物信息", description="训练产物路径等信息")
 

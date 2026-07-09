@@ -11,6 +11,45 @@ from src.storage import clear_stop_request, is_stop_requested, iso_now, load_tas
 from src.training.service import run_training_loop
 
 
+def _epoch_metric_from_training_metrics(epoch: int, metrics: dict) -> dict:
+    return {
+        "epoch": epoch,
+        "total_epochs": metrics.get("total_epochs"),
+        "train_accuracy": metrics.get("train_accuracy"),
+        "train_loss": metrics.get("train_loss"),
+        "val_accuracy": metrics.get("val_accuracy"),
+        "val_loss": metrics.get("val_loss"),
+        "f1_score": metrics.get("f1_score"),
+        "progress_percentage": metrics.get("progress_percentage"),
+    }
+
+
+def _upsert_epoch_metric(existing: list[dict] | None, metric: dict) -> list[dict]:
+    epoch = metric["epoch"]
+    metrics = [item for item in (existing or []) if item.get("epoch") != epoch]
+    metrics.append(metric)
+    return sorted(metrics, key=lambda item: int(item.get("epoch", 0)))
+
+
+def _final_progress_from_record(record: dict | None, result: dict, total_epochs: int) -> dict:
+    existing_progress = (record or {}).get("progress") or {}
+    epoch_metrics = (record or {}).get("epoch_metrics") or []
+    last_epoch_metrics = epoch_metrics[-1] if epoch_metrics else {}
+    current_epoch = int(result.get("epochs_completed") or last_epoch_metrics.get("epoch") or total_epochs)
+    return {
+        "current_epoch": current_epoch,
+        "total_epochs": int(result.get("total_epochs") or last_epoch_metrics.get("total_epochs") or total_epochs),
+        "current_batch": None,
+        "total_batches": None,
+        "progress_percentage": 100.0,
+        "train_accuracy": last_epoch_metrics.get("train_accuracy", existing_progress.get("train_accuracy")),
+        "train_loss": last_epoch_metrics.get("train_loss", existing_progress.get("train_loss")),
+        "val_accuracy": last_epoch_metrics.get("val_accuracy", existing_progress.get("val_accuracy")),
+        "val_loss": last_epoch_metrics.get("val_loss", existing_progress.get("val_loss")),
+        "f1_score": last_epoch_metrics.get("f1_score", existing_progress.get("f1_score")),
+    }
+
+
 @celery_app.task(bind=True, name="training.run_task")
 def start_training_task(self, task_id: str) -> dict:
     record = load_task_record(task_id)
@@ -39,7 +78,9 @@ def start_training_task(self, task_id: str) -> dict:
                 "train_loss": None,
                 "val_accuracy": None,
                 "val_loss": None,
+                "f1_score": None,
             },
+            "epoch_metrics": [],
             "error_message": None,
         },
     )
@@ -49,16 +90,25 @@ def start_training_task(self, task_id: str) -> dict:
         progress_data = {
             "current_epoch": epoch,
             "total_epochs": metrics["total_epochs"],
+            "current_batch": None,
+            "total_batches": None,
             "progress_percentage": metrics["progress_percentage"],
             "train_accuracy": metrics["train_accuracy"],
             "train_loss": metrics["train_loss"],
             "val_accuracy": metrics["val_accuracy"],
             "val_loss": metrics["val_loss"],
+            "f1_score": metrics.get("f1_score"),
         }
+        current_record = load_task_record(task_id) or {}
+        epoch_metrics = _upsert_epoch_metric(
+            current_record.get("epoch_metrics"),
+            _epoch_metric_from_training_metrics(epoch, metrics),
+        )
         update_task_record(
             task_id,
             {
                 "progress": progress_data,
+                "epoch_metrics": epoch_metrics,
                 "status": "training",
             },
         )
@@ -86,6 +136,7 @@ def start_training_task(self, task_id: str) -> dict:
             "train_loss": metrics["train_loss"],
             "val_accuracy": None,
             "val_loss": None,
+            "f1_score": None,
         }
         update_task_record(
             task_id,
@@ -151,22 +202,18 @@ def start_training_task(self, task_id: str) -> dict:
             artifacts["classifier_head_path"] = result["classifier_head_path"]
         else:
             artifacts["model_path"] = result["model_path"]
+        current_record = load_task_record(task_id)
         update_task_record(
             task_id,
             {
                 "status": "completed",
                 "completed_at": iso_now(),
-                "progress": {
-                    "current_epoch": request_payload["hyperparameters"]["epochs"],
-                    "total_epochs": request_payload["hyperparameters"]["epochs"],
-                    "current_batch": None,
-                    "total_batches": None,
-                    "progress_percentage": 100.0,
-                    "train_accuracy": None,
-                    "train_loss": None,
-                    "val_accuracy": None,
-                    "val_loss": None,
-                },
+                "progress": _final_progress_from_record(
+                    current_record,
+                    result,
+                    request_payload["hyperparameters"]["epochs"],
+                ),
+                "epoch_metrics": (current_record or {}).get("epoch_metrics") or [],
                 "artifacts": artifacts,
             },
         )
