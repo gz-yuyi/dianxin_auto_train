@@ -1,6 +1,8 @@
+from concurrent.futures import TimeoutError as FutureTimeoutError
+
 from fastapi import APIRouter, HTTPException
 
-from src.config import is_inference_gateway_enabled
+from src.config import get_inference_predict_timeout, is_inference_gateway_enabled
 from src.inference.gateway import InferenceGatewayError, get_inference_gateway
 from src.schemas import (
     InferenceServiceStatusResponse,
@@ -67,6 +69,8 @@ def load_lora_model(payload: LoraModelLoadRequest) -> LoraModelLoadResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FutureTimeoutError as exc:
+        raise HTTPException(status_code=504, detail="model load timed out on inference workers") from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return LoraModelLoadResponse(model_id=model_id, status="loaded", message="model loaded")
@@ -171,15 +175,22 @@ def predict_lora(payload: LoraPredictRequest) -> LoraPredictResponse:
 
     manager = _get_inference_manager()
     try:
-        future = manager.enqueue(payload.model_id, payload.texts, payload.top_n)
+        request = manager.enqueue(payload.model_id, payload.texts, payload.top_n)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    predict_timeout = get_inference_predict_timeout()
     try:
-        result = future.result()
+        result = request.future.result(timeout=predict_timeout)
+    except FutureTimeoutError as exc:
+        removed = manager.cancel_request(payload.model_id, request)
+        raise HTTPException(
+            status_code=504,
+            detail=f"predict timed out after {predict_timeout:.0f}s (cancelled {removed} queued items)",
+        ) from exc
     except Exception as exc:
         if _is_model_state_error(exc):
             raise HTTPException(status_code=409, detail=str(exc)) from exc

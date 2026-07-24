@@ -1,7 +1,7 @@
-import contextlib
 import hashlib
 import inspect
 import json
+import os
 import pickle
 import queue
 import tempfile
@@ -22,9 +22,12 @@ from transformers import AutoModel, AutoTokenizer
 
 from src.config import (
     get_inference_base_model,
+    get_inference_empty_cache_on_unload,
     get_inference_max_batch_size,
+    get_inference_max_pending_items,
     get_inference_queue_age_weight_seconds,
     get_inference_unload_timeout,
+    get_inference_worker_watchdog_timeout,
     get_inference_workers_per_gpu,
     get_model_output_dir,
 )
@@ -37,6 +40,46 @@ from src.device_utils import (
 
 # Global lock for model loading to prevent meta tensor issues with multiple GPUs
 _MODEL_LOAD_LOCK = threading.Lock()
+
+
+class _CacheJanitor:
+    """在独立线程中执行 empty_cache，避免阻塞推理 Worker 线程。
+
+    torch_npu 的 empty_cache 会进入 Ascend 驱动，线上已多次出现该调用
+    永久阻塞导致整个推理服务卡死的事故。因此：
+    1. 默认不调用 empty_cache（分配器缓存的显存会被后续模型复用，不会泄漏）；
+    2. 即使开启，也只在这个与推理无关的线程里执行——即使它卡死，
+       推理服务本身不受影响（仅显存无法归还给驱动）。
+    """
+
+    def __init__(self) -> None:
+        self._queue: queue.Queue[torch.device] = queue.Queue()
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self.busy_since: float | None = None
+
+    def submit(self, device: torch.device) -> None:
+        if not get_inference_empty_cache_on_unload():
+            return
+        with self._lock:
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._run, name="cache-janitor", daemon=True)
+                self._thread.start()
+        self._queue.put(device)
+
+    def _run(self) -> None:
+        while True:
+            device = self._queue.get()
+            self.busy_since = time.time()
+            try:
+                empty_cache(device)
+            except Exception as exc:
+                logger.warning("empty_cache failed on {}: {}", device, exc)
+            finally:
+                self.busy_since = None
+
+
+_CACHE_JANITOR = _CacheJanitor()
 
 _PEFT_CONFIG_FILENAME = "adapter_config.json"
 _PEFT_METADATA_KEYS = {"peft_version"}
@@ -220,6 +263,7 @@ class InferenceRequest:
         self.top_n = top_n
         self.created_at = time.time()
         self.future: Future = Future()
+        self.cancelled = threading.Event()
         self._lock = threading.Lock()
         self._pending = len(texts)
         self._labels: list[str | None] = [None] * len(texts)
@@ -345,6 +389,9 @@ class InferenceWorker:
         self.shutdown_event = threading.Event()
         self.thread = threading.Thread(target=self._run, name=f"infer-worker-{worker_id}", daemon=True)
         self._ready = threading.Event()
+        # 看门狗观测点：当前正在执行的操作及其开始时间（None 表示空闲）
+        self.op_name: str | None = None
+        self.op_started_at: float | None = None
         self._base_model: nn.Module | None = None
         self._peft_model: PeftModel | None = None
         self._classifier: InferenceTextClassifier | None = None
@@ -383,15 +430,19 @@ class InferenceWorker:
             adapter_id, items = self.manager.get_next_batch(self.max_batch_size, timeout=0.2)
             if adapter_id is None or not items:
                 continue
+            self._begin_op(f"batch:{adapter_id}")
             try:
-                self._ensure_adapter_ready(adapter_id)
-                self._run_batch(adapter_id, items)
+                items = [item for item in items if not item.request.cancelled.is_set()]
+                if items:
+                    self._ensure_adapter_ready(adapter_id)
+                    self._run_batch(adapter_id, items)
             except Exception as exc:
                 logger.exception("Worker {} failed on adapter {}: {}", self.worker_id, adapter_id, exc)
                 for item in items:
                     item.request.set_exception(exc)
             finally:
                 self.manager.finish_batch(adapter_id)
+                self._end_op()
 
     def _initialize(self) -> None:
         # 使用全局锁确保只有一个 Worker 同时加载模型
@@ -420,12 +471,23 @@ class InferenceWorker:
                 func, future = self.control_queue.get_nowait()
             except queue.Empty:
                 break
+            self._begin_op(getattr(func, "__name__", "control"))
             try:
                 func(self)
             except Exception as exc:
                 future.set_exception(exc)
             else:
                 future.set_result(None)
+            finally:
+                self._end_op()
+
+    def _begin_op(self, name: str) -> None:
+        self.op_name = name
+        self.op_started_at = time.time()
+
+    def _end_op(self) -> None:
+        self.op_name = None
+        self.op_started_at = None
 
     def _ensure_adapter_ready(self, adapter_id: str) -> None:
         model_info = self.manager.get_adapter_state(adapter_id)
@@ -571,7 +633,9 @@ class InferenceWorker:
 
     def unload_adapter(self, adapter_id: str) -> None:
         self._evict_adapter(adapter_id, require_delete=False)
-        empty_cache(self.device)
+        # empty_cache 的驱动调用可能永久阻塞（线上事故），绝不能在 Worker 线程里
+        # 同步执行；交给独立的 janitor 线程（默认关闭，详见 _CacheJanitor）。
+        _CACHE_JANITOR.submit(self.device)
 
     def _evict_adapter(self, adapter_id: str, *, require_delete: bool) -> None:
         adapter_name = self._adapter_name_map.get(adapter_id)
@@ -600,12 +664,15 @@ class LoraInferenceManager:
         self.age_weight_seconds = max(0.1, get_inference_queue_age_weight_seconds())
         self.unload_timeout = max(1.0, get_inference_unload_timeout())
         self.workers_per_gpu = max(1, get_inference_workers_per_gpu())
+        self.max_pending_items = max(1, get_inference_max_pending_items())
+        self.watchdog_timeout = max(0.0, get_inference_worker_watchdog_timeout())
         self.lock = threading.Lock()
         self.condition = threading.Condition(self.lock)
         self.adapter_states: dict[str, AdapterState] = {}
         self.adapter_queues: dict[str, deque[InferenceItem]] = {}
         self.workers: list[InferenceWorker] = []
         self.shutdown_event = threading.Event()
+        self._watchdog_started = False
 
     def start(self) -> None:
         if self.workers:
@@ -627,6 +694,42 @@ class LoraInferenceManager:
                 worker.start()
         for worker in self.workers:
             worker.wait_ready(timeout=600)
+        self._start_watchdog()
+
+    def _start_watchdog(self) -> None:
+        if self.watchdog_timeout <= 0 or self._watchdog_started:
+            return
+        self._watchdog_started = True
+        thread = threading.Thread(target=self._watchdog_loop, name="inference-watchdog", daemon=True)
+        thread.start()
+
+    def _watchdog_loop(self) -> None:
+        interval = max(5.0, min(60.0, self.watchdog_timeout / 4.0))
+        while not self.shutdown_event.wait(interval):
+            now = time.time()
+            for worker in self.workers:
+                op_started_at = worker.op_started_at
+                if op_started_at is None:
+                    continue
+                stuck_seconds = now - op_started_at
+                if stuck_seconds > self.watchdog_timeout:
+                    logger.critical(
+                        "Inference worker {} stuck in '{}' for {:.0f}s (limit {:.0f}s); "
+                        "terminating process so the container runtime can restart it",
+                        worker.worker_id,
+                        worker.op_name,
+                        stuck_seconds,
+                        self.watchdog_timeout,
+                    )
+                    # 驱动级卡死无法在线程内恢复，退出进程由 restart 策略拉起新容器
+                    os._exit(1)
+            janitor_busy_since = _CACHE_JANITOR.busy_since
+            if janitor_busy_since is not None and now - janitor_busy_since > self.watchdog_timeout:
+                logger.error(
+                    "empty_cache has been blocked for {:.0f}s; inference is unaffected "
+                    "but NPU memory will not be returned to the driver",
+                    now - janitor_busy_since,
+                )
 
     def stop(self) -> None:
         self.shutdown_event.set()
@@ -667,7 +770,7 @@ class LoraInferenceManager:
         if not state.unload_event.wait(timeout=self.unload_timeout):
             raise TimeoutError("model unload timed out")
 
-    def enqueue(self, model_id: str, texts: list[str], top_n: int) -> Future:
+    def enqueue(self, model_id: str, texts: list[str], top_n: int) -> InferenceRequest:
         if not texts:
             raise ValueError("texts must not be empty")
         request = InferenceRequest(model_id, texts, top_n)
@@ -679,10 +782,27 @@ class LoraInferenceManager:
                 raise KeyError("model not loaded")
             if state.draining:
                 raise RuntimeError("model is unloading")
+            pending = sum(len(queue_ref) for queue_ref in self.adapter_queues.values())
+            if pending + len(items) > self.max_pending_items:
+                raise RuntimeError("inference queue is full, please retry later")
             queue_ref = self.adapter_queues.setdefault(model_id, deque())
             queue_ref.extend(items)
             self.condition.notify_all()
-        return request.future
+        return request
+
+    def cancel_request(self, model_id: str, request: InferenceRequest) -> int:
+        """取消请求：标记取消标志（已出队的条目由 Worker 在批处理前跳过），
+        并移除仍滞留在队列中的条目。返回被移除的条目数。"""
+        request.cancelled.set()
+        removed = 0
+        with self.lock:
+            queue_ref = self.adapter_queues.get(model_id)
+            if queue_ref:
+                kept = deque(item for item in queue_ref if item.request is not request)
+                removed = len(queue_ref) - len(kept)
+                if removed:
+                    self.adapter_queues[model_id] = kept
+        return removed
 
     def get_next_batch(self, max_batch_size: int, timeout: float) -> tuple[str | None, list[InferenceItem]]:
         with self.condition:
@@ -711,7 +831,12 @@ class LoraInferenceManager:
             state.active_batches = max(0, state.active_batches - 1)
             should_unload = state.draining and not self.adapter_queues.get(adapter_id) and state.active_batches == 0
         if should_unload:
-            self._finalize_unload(adapter_id)
+            try:
+                self._finalize_unload(adapter_id)
+            except Exception as exc:
+                # 此处可能在 Worker 线程内执行，绝不能让异常杀死 Worker 线程；
+                # 等待 unload_event 的调用方会因超时感知失败。
+                logger.error("Deferred unload of {} failed: {}", adapter_id, exc)
 
     def get_adapter_state(self, adapter_id: str) -> AdapterState | None:
         with self.lock:
@@ -839,9 +964,18 @@ class LoraInferenceManager:
         if state is None:
             return
         futures = [worker.submit_control(lambda w, mid=model_id: w.unload_adapter(mid)) for worker in self.workers]
+        first_error: Exception | None = None
         for future in futures:
-            with contextlib.suppress(Exception):
-                future.result(timeout=60)
+            try:
+                future.result(timeout=self.unload_timeout)
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+                logger.error("Worker failed to unload adapter {}: {}", model_id, exc)
+        if first_error is not None:
+            # 不能静默上报“卸载成功”：Worker 实际未完成卸载时必须让调用方感知，
+            # 由看门狗/重启流程恢复服务。
+            raise TimeoutError(f"model unload did not complete on all workers: {first_error}")
         with self.lock:
             self.adapter_states.pop(model_id, None)
             self.adapter_queues.pop(model_id, None)

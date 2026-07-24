@@ -152,6 +152,12 @@ uv run python main.py train --payload-file payload.json --callback
 - 命名规则：`<model_stem>.lora` 与 `<model_stem>.head.pt` 位于该目录（`model_stem` 为英文模型名去掉可选 `.pt` 后缀）。
 - 主要接口：`POST /inference/models/publish`（发布为可预测状态）、`POST /inference/models/load`、`POST /inference/predict`、`POST /inference/models/unload`。
 - Worker 设置：`INFERENCE_BASE_MODEL`、`INFERENCE_WORKERS_PER_GPU`、`INFERENCE_MAX_BATCH_SIZE`。
+- 稳定性防护（均有默认值，可按需在 `.env` 覆盖）：
+  - `INFERENCE_PREDICT_TIMEOUT`（默认 120）：predict 等待推理结果的最长秒数，超时返回 504 并自动取消滞留队列的条目。
+  - `INFERENCE_MAX_PENDING_ITEMS`（默认 1000）：推理队列积压上限，超过后新请求快速失败（409），避免线程池被拖垮。
+  - `INFERENCE_WORKER_WATCHDOG_TIMEOUT`（默认 600，0 表示禁用）：Worker 单操作超时判定为卡死，进程主动退出并依赖容器 `restart: unless-stopped` 自愈。
+  - `INFERENCE_EMPTY_CACHE_ON_UNLOAD`（默认 false）：卸载后是否回收显存。Ascend 驱动的 `empty_cache` 曾在线上多次永久阻塞导致服务卡死，故默认关闭；即使开启也仅在独立线程中执行，卡死不影响推理。
+  - `INFERENCE_CB_FAILURE_THRESHOLD` / `INFERENCE_CB_COOLDOWN_SECONDS`（默认 3 / 60）：网关熔断器，upstream 连续失败后暂时摘除，predict 只路由到健康 upstream。
 
 ### 回调
 每个 epoch 会向 `callback_url` 推送进度；同时可向 `.env` 配置的外部回调地址推送（`EXTERNAL_CALLBACK_BASE_URL` / `EXTERNAL_PUBLISH_CALLBACK_URL`）。详见 `docs/external_callback.md`。

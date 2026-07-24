@@ -1,7 +1,12 @@
+import os
 import sys
+import threading
 import types
 import unittest
+from collections import deque
+from concurrent.futures import Future
 from pathlib import Path
+from unittest import mock
 
 
 def _install_runtime_stubs() -> None:
@@ -210,6 +215,130 @@ class InferenceServiceTests(unittest.TestCase):
                 {"a": 0, "b": 1},
                 {0: "a", 1: "c"},
             )
+
+
+class InferenceQueueGuardTests(unittest.TestCase):
+    """针对“Worker 卡死导致服务整体无响应”事故的防护测试。"""
+
+    def _make_manager(self, model_id: str = "m1") -> service.LoraInferenceManager:
+        manager = service.LoraInferenceManager()
+        state = service.AdapterState(
+            model_id=model_id,
+            adapter_path=Path("/tmp/m1.lora"),
+            head_path=Path("/tmp/m1.head.pt"),
+            label_mapping_path=Path("/tmp/m1.head.pt.pkl"),
+            max_length=512,
+            label_to_id={"a": 0},
+            id_to_label={0: "a"},
+            cache_key="k",
+        )
+        manager.adapter_states[model_id] = state
+        manager.adapter_queues[model_id] = deque()
+        return manager
+
+    def test_enqueue_rejects_when_queue_is_full(self):
+        manager = self._make_manager()
+        manager.max_pending_items = 3
+        manager.enqueue("m1", ["t1", "t2"], 1)
+        with self.assertRaisesRegex(RuntimeError, "queue is full"):
+            manager.enqueue("m1", ["t3", "t4"], 1)
+        # 原队列不受影响
+        self.assertEqual(len(manager.adapter_queues["m1"]), 2)
+
+    def test_cancel_request_removes_queued_items_and_marks_cancelled(self):
+        manager = self._make_manager()
+        request1 = manager.enqueue("m1", ["a", "b"], 1)
+        request2 = manager.enqueue("m1", ["c"], 1)
+
+        removed = manager.cancel_request("m1", request1)
+
+        self.assertEqual(removed, 2)
+        self.assertTrue(request1.cancelled.is_set())
+        self.assertFalse(request2.cancelled.is_set())
+        remaining = manager.adapter_queues["m1"]
+        self.assertEqual(len(remaining), 1)
+        self.assertIs(remaining[0].request, request2)
+
+    def test_finalize_unload_raises_when_worker_never_completes(self):
+        manager = self._make_manager()
+        manager.unload_timeout = 0.1
+        stuck_future: Future = Future()  # 永不完成，模拟 Worker 卡死
+
+        class StuckWorker:
+            def submit_control(self, func):
+                return stuck_future
+
+        manager.workers = [StuckWorker()]
+
+        with self.assertRaises(TimeoutError):
+            manager._finalize_unload("m1")
+        # 失败时不能静默删除状态（避免误报“卸载成功”）
+        self.assertIn("m1", manager.adapter_states)
+
+    def test_unload_adapter_defers_empty_cache_to_janitor(self):
+        worker = object.__new__(service.InferenceWorker)
+        worker.device = service.torch.device("cpu")
+        evicted: list[str] = []
+        worker._evict_adapter = lambda adapter_id, require_delete: evicted.append(adapter_id)
+        submitted: list[object] = []
+        original_submit = service._CACHE_JANITOR.submit
+        service._CACHE_JANITOR.submit = lambda device: submitted.append(device)
+        try:
+            worker.unload_adapter("m1")
+        finally:
+            service._CACHE_JANITOR.submit = original_submit
+        self.assertEqual(evicted, ["m1"])
+        # empty_cache 必须交给 janitor，绝不能在 Worker 线程内同步执行
+        self.assertEqual(submitted, [worker.device])
+
+    def test_janitor_is_disabled_by_default(self):
+        with mock.patch.dict(os.environ, {"INFERENCE_EMPTY_CACHE_ON_UNLOAD": "false"}):
+            janitor = service._CacheJanitor()
+            janitor.submit(service.torch.device("cpu"))
+            self.assertIsNone(janitor._thread)
+            self.assertTrue(janitor._queue.empty())
+
+    def test_worker_skips_cancelled_items_before_batch(self):
+        manager = self._make_manager()
+        request = manager.enqueue("m1", ["a"], 1)
+        item = manager.adapter_queues["m1"][0]
+        request.cancelled.set()
+
+        batch_calls: list[str] = []
+        worker = object.__new__(service.InferenceWorker)
+        worker.worker_id = "cpu0-0"
+        worker.max_batch_size = 8
+        worker.shutdown_event = manager.shutdown_event
+        worker._ready = threading.Event()
+        worker._initialize = lambda: None
+        worker._ensure_adapter_ready = lambda adapter_id: batch_calls.append(adapter_id)
+        worker._run_batch = lambda adapter_id, items: batch_calls.append(adapter_id)
+        worker._begin_op = lambda name: None
+        worker._end_op = lambda: None
+        worker._drain_control_queue = lambda: None
+
+        class OneShotManager:
+            def __init__(self, real):
+                self.calls = 0
+                self.real = real
+
+            def get_next_batch(self, max_batch_size, timeout):
+                self.calls += 1
+                if self.calls == 1:
+                    return "m1", [item]
+                self.real.shutdown_event.set()
+                return None, []
+
+            def finish_batch(self, adapter_id):
+                self.real.finish_batch(adapter_id)
+
+        manager.adapter_states["m1"].active_batches = 0
+        worker.manager = OneShotManager(manager)
+        worker._run()
+
+        # 已取消的请求不应触发 adapter 加载/批处理
+        self.assertEqual(batch_calls, [])
+        self.assertFalse(request.future.done())
 
 
 if __name__ == "__main__":

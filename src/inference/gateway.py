@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any
@@ -9,6 +10,8 @@ import requests
 from loguru import logger
 
 from src.config import (
+    get_inference_cb_cooldown_seconds,
+    get_inference_cb_failure_threshold,
     get_inference_lb_policy,
     get_inference_upstream_timeout,
     get_inference_upstream_urls,
@@ -41,10 +44,50 @@ class InferenceGateway:
         self._cursor = 0
         self._lock = threading.Lock()
         self._thread_local = threading.local()
+        # 熔断器状态：连续失败计数与摘除截止时间
+        self._cb_failure_threshold = max(1, get_inference_cb_failure_threshold())
+        self._cb_cooldown_seconds = max(1.0, get_inference_cb_cooldown_seconds())
+        self._upstream_failures: dict[int, int] = {}
+        self._upstream_dead_until: dict[int, float] = {}
+
+    def _record_upstream_success(self, index: int) -> None:
+        with self._lock:
+            self._upstream_failures.pop(index, None)
+            self._upstream_dead_until.pop(index, None)
+
+    def _record_upstream_failure(self, index: int) -> None:
+        with self._lock:
+            failures = self._upstream_failures.get(index, 0) + 1
+            self._upstream_failures[index] = failures
+            if failures >= self._cb_failure_threshold:
+                dead_until = time.time() + self._cb_cooldown_seconds
+                if self._upstream_dead_until.get(index, 0.0) < dead_until:
+                    self._upstream_dead_until[index] = dead_until
+                    logger.warning(
+                        "Inference upstream {} marked unhealthy for {}s after {} consecutive failures",
+                        index,
+                        self._cb_cooldown_seconds,
+                        failures,
+                    )
+
+    def _healthy_upstreams(self) -> list[InferenceUpstream]:
+        now = time.time()
+        with self._lock:
+            return [
+                upstream
+                for upstream in self.upstreams
+                if self._upstream_dead_until.get(upstream.index, 0.0) <= now
+            ]
 
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         upstream = self._select_upstream()
-        return self._request_json("post", upstream, "/inference/predict", payload)
+        try:
+            result = self._request_json("post", upstream, "/inference/predict", payload)
+        except InferenceGatewayError:
+            self._record_upstream_failure(upstream.index)
+            raise
+        self._record_upstream_success(upstream.index)
+        return result
 
     def load_model(self, payload: dict[str, Any]) -> dict[str, Any]:
         results = self._broadcast("post", "/inference/models/load", payload)
@@ -178,8 +221,10 @@ class InferenceGateway:
         return self._select_round_robin_upstream()
 
     def _select_round_robin_upstream(self) -> InferenceUpstream:
+        # 优先在健康的 upstream 中轮询；全部被熔断时退化为全量轮询（尽力而为）
+        candidates = self._healthy_upstreams() or self.upstreams
         with self._lock:
-            upstream = self.upstreams[self._cursor % len(self.upstreams)]
+            upstream = candidates[self._cursor % len(candidates)]
             self._cursor += 1
         return upstream
 

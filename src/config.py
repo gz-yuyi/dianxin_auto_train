@@ -133,6 +133,40 @@ def get_inference_unload_timeout() -> float:
     return env_float("INFERENCE_UNLOAD_TIMEOUT", 60.0)
 
 
+def get_inference_predict_timeout() -> float:
+    """预测请求等待推理结果的最长时间（秒）。超时后请求被取消并返回 504。"""
+    return env_float("INFERENCE_PREDICT_TIMEOUT", 120.0)
+
+
+def get_inference_max_pending_items() -> int:
+    """所有模型队列中允许积压的最大推理条目数，超过后拒绝新请求（快速失败）。"""
+    return env_int("INFERENCE_MAX_PENDING_ITEMS", 1000)
+
+
+def get_inference_worker_watchdog_timeout() -> float:
+    """Worker 单个操作允许的最长执行时间（秒），超过判定为卡死并退出进程以便容器重启。
+    设置为 0 可禁用看门狗。"""
+    return env_float("INFERENCE_WORKER_WATCHDOG_TIMEOUT", 600.0)
+
+
+def get_inference_empty_cache_on_unload() -> bool:
+    """卸载模型后是否回收显存。
+    empty_cache 的驱动调用在 Ascend 上可能永久阻塞，因此默认关闭，
+    且即使开启也只在与推理无关的独立线程中执行。"""
+    value = (env_str("INFERENCE_EMPTY_CACHE_ON_UNLOAD", "false") or "false").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def get_inference_cb_failure_threshold() -> int:
+    """网关熔断器：upstream 连续失败多少次后被暂时摘除。"""
+    return env_int("INFERENCE_CB_FAILURE_THRESHOLD", 3)
+
+
+def get_inference_cb_cooldown_seconds() -> float:
+    """网关熔断器：upstream 被摘除后的冷却时间（秒），冷却结束后半开重试。"""
+    return env_float("INFERENCE_CB_COOLDOWN_SECONDS", 60.0)
+
+
 def get_inference_upstream_urls() -> list[str]:
     raw_value = env_str("INFERENCE_UPSTREAM_URLS", "") or ""
     urls = []
@@ -181,8 +215,15 @@ __all__ = [
     "get_external_publish_callback_url",
     "get_external_status_callback_url",
     "get_inference_base_model",
+    "get_inference_cb_cooldown_seconds",
+    "get_inference_cb_failure_threshold",
+    "get_inference_empty_cache_on_unload",
     "get_inference_max_batch_size",
+    "get_inference_max_pending_items",
+    "get_inference_predict_timeout",
     "get_inference_queue_age_weight_seconds",
+    "get_inference_unload_timeout",
+    "get_inference_worker_watchdog_timeout",
     "get_inference_lb_policy",
     "get_inference_unload_timeout",
     "get_inference_upstream_timeout",
