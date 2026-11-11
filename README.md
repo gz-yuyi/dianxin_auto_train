@@ -2,6 +2,12 @@
 
 基于 BERT + Celery 的文本分类自动微调流水线。
 
+### 版本与变更记录
+
+- 当前正式版本：`v0.1.0`。
+- 变更记录：[CHANGELOG.md](CHANGELOG.md)。版本规范与发布步骤：[docs/releasing.md](docs/releasing.md)。
+- 正式部署使用固定镜像标签：GPU 为 `v0.1.0-gpu`（`linux/amd64`），NPU 默认目标为 `v0.1.0-npu-cann81-910b`（`linux/arm64`）。`latest` / `npu` 为滚动标签，不用于锁定正式交付版本。
+
 ### 环境要求
 - Python 3.10-3.12
 - Redis（Celery broker/result backend）
@@ -131,13 +137,13 @@ uv run python main.py train --payload-file payload.json --callback
 仓库内会通过两条 workflow 在 `main` 分支、任意 `v*` tag、或手动触发时构建并推送镜像到：
 `crpi-lxfoqbwevmx9mc1q.cn-chengdu.personal.cr.aliyuncs.com/yuyi_tech/dianxin_auto_train`
 
-- `.github/workflows/docker-build-push.yml`：默认 CPU/CUDA 镜像，推送 `latest`、`sha-<git-sha>` 和版本 tag。
-- `.github/workflows/docker-build-push-npu.yml`：昇腾 NPU 镜像，使用 `Dockerfile.ascend` 构建，只推送 `linux/arm64` 镜像，tag 为 `npu` 和 `<tag>-npu`。
+- `.github/workflows/docker-build-push.yml`：CPU/CUDA 镜像，构建 `linux/amd64`；主分支推送 `latest`、`sha-<git-sha>`，版本标签构建额外推送 `<tag>` 和 `<tag>-gpu`。
+- `.github/workflows/docker-build-push-npu.yml`：昇腾 NPU 镜像，使用 `Dockerfile.ascend` 构建 `linux/arm64`；默认目标为 `cann81-910b`，主分支推送 `npu` / `npu-cann81-910b`，版本标签构建推送 `<tag>-npu-cann81-910b`。其他 SDK 需手动选择目标构建，不能仅因存在 Release 就假定有对应镜像。
 
-需要在仓库 secrets 中配置 `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`。CPU/CUDA workflow 会推送 `latest`、`sha-<git-sha>` 和 tag 版本；NPU workflow 会推送 `npu` 和 `tag-npu` 版本。
+需要在仓库 secrets 中配置 `ALIYUN_REGISTRY_USERNAME` / `ALIYUN_REGISTRY_PASSWORD`。版本标签构建前会检查项目、应用、锁文件、Git tag 和 Changelog 的版本一致性。
 
 ### API
-服务 API 位于 `/api/v1`：
+服务 API 直接位于根路径，没有 `/api/v1` 前缀：
 - `POST /training/data/upload` – 上传训练数据，返回的 `filename` 用于创建训练任务
 - `POST /training/tasks` – 提交训练任务（详见 `docs/training_api.md`）
 - `GET /training/tasks/{task_id}` – 查询任务状态与指标

@@ -6,6 +6,7 @@ from src.api.routes.training import data_router as training_data_router
 from src.api.routes.training import router as training_router
 from src.config import is_inference_gateway_enabled
 from src.logging_utils import configure_logging
+from src.version import __version__
 
 
 def _get_inference_manager():
@@ -18,7 +19,7 @@ def create_app() -> FastAPI:
     configure_logging()
     app = FastAPI(
         title="电信自动训练服务",
-        version="1.0.0",
+        version=__version__,
         description="用于模型训练与推理管理的自动化服务接口",
     )
     app.include_router(training_router)

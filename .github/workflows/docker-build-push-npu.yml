@@ -32,6 +32,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate release version and changelog
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 -m unittest discover -s tests -p test_version.py -v
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

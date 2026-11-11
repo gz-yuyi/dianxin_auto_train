@@ -1,7 +1,7 @@
 # API接口设计文档
 
 ## 基础信息
-- 基础URL: `http://localhost:8000/api/v1`
+- 基础URL: `http://localhost:8000`（没有 `/api/v1` 前缀）
 - 数据格式: JSON
 - 认证方式: 暂无（后续可添加API Key认证）
 
