@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 镜像工作流显式关闭 Registry 不支持的 BuildKit provenance/SBOM 附加证明，避免推送时报 `unknown manifest class for application/vnd.oci.empty.v1+json`；应用镜像仍保留版本、源码 revision 和 digest 用于追溯。
+
 ## [0.1.0] - 2026-11-11
 
 首个正式发布版本，汇总此前尚未打标签的训练、推理与部署能力。

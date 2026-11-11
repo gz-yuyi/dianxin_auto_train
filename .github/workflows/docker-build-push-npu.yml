@@ -94,6 +94,9 @@ jobs:
           file: ./Dockerfile.ascend
           platforms: linux/arm64
           push: true
+          # This registry rejects BuildKit's OCI empty-config attestations.
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |

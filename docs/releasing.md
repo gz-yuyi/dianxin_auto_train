@@ -53,6 +53,12 @@
 
 目前 GitHub Release 由维护者在构建通过后发布，工作流不会自动发布 Release，也不会自动更新任何服务器。
 
+### Registry 附加证明兼容性
+
+当前阿里云 Registry 不接受新版 BuildKit 使用 `application/vnd.oci.empty.v1+json` 的证明配置，因此工作流显式设置 `provenance: false` 和 `sbom: false`。这不改变应用镜像内容，但意味着仓库不提供这些附加证明；交付时仍须核对源码 revision 和镜像 digest。
+
+若遇到与 v0.1.0 相同的情况：构建和应用 manifest 上传已成功，仅最终带附加证明的索引推送失败，可以在确认日志中的应用 manifest digest、源码 revision、版本和架构后，直接把**同次构建的单架构应用 manifest** 发布到目标版本标签，再对实际标签拉取验证。不要移动 Git tag，也不要用其他提交的镜像冒充发布版本。Release 必须如实说明该人工恢复过程，不能把失败的 CI 标记为成功。
+
 ## v0.1.0 交付注意事项
 
 - API 路径为 `/training/...` 和 `/inference/...`，没有 `/api/v1` 前缀。
